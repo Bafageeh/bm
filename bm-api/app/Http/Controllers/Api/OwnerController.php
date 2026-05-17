@@ -177,6 +177,20 @@ class OwnerController extends BaseApiController
     {
         $numbers = collect($apartments)->pluck('number')->all();
 
+        $conflictingNumbers = $building->apartments()
+            ->whereIn('number', $numbers)
+            ->whereNotNull('owner_id')
+            ->where('owner_id', '<>', $owner->id)
+            ->pluck('number')
+            ->values()
+            ->all();
+
+        if (count($conflictingNumbers) > 0) {
+            throw ValidationException::withMessages([
+                'apartments' => ['رقم الشقة مستخدم مسبقًا في هذا المبنى: ' . implode('، ', $conflictingNumbers)],
+            ]);
+        }
+
         $building->apartments()
             ->where('owner_id', $owner->id)
             ->whereNotIn('number', $numbers)
