@@ -70,7 +70,12 @@ abstract class BaseApiController extends Controller
         return [
             'id' => $owner->id,
             'name' => $owner->name,
+            'national_id' => $owner->national_id,
             'phone' => $owner->phone,
+            'email' => $owner->email,
+            'notes' => $owner->notes,
+            'user_id' => $owner->user_id,
+            'login' => $owner->national_id ?: ($owner->phone ?: ($owner->email ?: $owner->user?->username)),
             'apartment_count' => $apartmentCount,
             'apartments' => $owner->apartments()->orderBy('number')->pluck('number'),
             'total_payments' => round($payments, 2),
