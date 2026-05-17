@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy to bm.pm.sa
+    name: Deploy Laravel API and React Native app
     runs-on: ubuntu-latest
 
     steps:
@@ -65,11 +65,15 @@ jobs:
           set -euo pipefail
 
           PROJECT_PATH="${BM_PROJECT_PATH:-/mnt/home-storage/home/pmsa/apps/bm}"
+          API_DIR="$PROJECT_PATH/bm-api"
+          MOBILE_DIR="$PROJECT_PATH/bm-mobile"
           REPO_URL="${BM_REPO_URL}"
           BRANCH="${BM_BRANCH:-main}"
 
           echo "Deploying BM"
-          echo "Project path: $PROJECT_PATH"
+          echo "Repository root: $PROJECT_PATH"
+          echo "Laravel API dir: $API_DIR"
+          echo "React Native dir: $MOBILE_DIR"
           echo "Branch: $BRANCH"
 
           command -v git >/dev/null 2>&1 || { echo "git is not installed on server"; exit 1; }
@@ -92,8 +96,10 @@ jobs:
             cd "$PROJECT_PATH"
           fi
 
-          if [ -f composer.json ]; then
-            echo "Laravel/PHP project detected"
+          if [ -f "$API_DIR/composer.json" ]; then
+            echo "Laravel API project detected at $API_DIR"
+            cd "$API_DIR"
+
             composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 
             if [ -f artisan ]; then
@@ -102,31 +108,35 @@ jobs:
               php artisan storage:link || true
               php artisan optimize || true
             fi
+
+            mkdir -p storage bootstrap/cache
+            chmod -R ug+rwX storage bootstrap/cache || true
+          else
+            echo "No Laravel API composer.json found yet at $API_DIR. Skipping API deployment steps."
           fi
 
-          if [ -f package.json ]; then
-            echo "Node project detected"
+          if [ -f "$MOBILE_DIR/package.json" ]; then
+            echo "React Native mobile project detected at $MOBILE_DIR"
+            cd "$MOBILE_DIR"
+
             if [ -f package-lock.json ]; then
               npm ci
             else
               npm install
             fi
 
-            if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.build ? 0 : 1)"; then
-              npm run build
-            fi
+            echo "Mobile dependencies installed. APK/EAS builds are intentionally not run automatically."
+          else
+            echo "No React Native package.json found yet at $MOBILE_DIR. Skipping mobile dependency steps."
           fi
 
           if id pmsa >/dev/null 2>&1; then
             chown -R pmsa:pmsa "$PROJECT_PATH" || true
           fi
 
-          if [ -d storage ] || [ -d bootstrap/cache ]; then
-            mkdir -p storage bootstrap/cache
-            if id pmsa >/dev/null 2>&1; then
-              chown -R pmsa:pmsa storage bootstrap/cache || true
-            fi
-            chmod -R ug+rwX storage bootstrap/cache || true
+          if [ -d "$API_DIR/storage" ] || [ -d "$API_DIR/bootstrap/cache" ]; then
+            mkdir -p "$API_DIR/storage" "$API_DIR/bootstrap/cache"
+            chmod -R ug+rwX "$API_DIR/storage" "$API_DIR/bootstrap/cache" || true
           fi
 
           echo "BM deploy completed"
