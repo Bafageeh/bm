@@ -1,0 +1,22 @@
+# Laravel
+bm-api/.env
+bm-api/vendor/
+bm-api/storage/*.key
+bm-api/storage/logs/*.log
+bm-api/database/*.sqlite
+bm-api/bootstrap/cache/*.php
+
+# Expo / React Native
+bm-mobile/node_modules/
+bm-mobile/.expo/
+bm-mobile/.expo-shared/
+bm-mobile/dist/
+bm-mobile/web-build/
+bm-mobile/android/
+bm-mobile/ios/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.log
