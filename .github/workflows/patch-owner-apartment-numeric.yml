@@ -1,0 +1,73 @@
+name: Patch owner apartment numeric only
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-owner-apartment-numeric.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Make owner apartment field numeric only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('bm-mobile/App.js')
+          s = p.read_text()
+
+          old = "function Field({ label, value, onChangeText, placeholder, keyboardType = 'default', secureTextEntry = false, multiline = false }) {\n  return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput style={[styles.input, multiline && styles.textarea]} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor=\"#94a3b8\" keyboardType={keyboardType} secureTextEntry={secureTextEntry} multiline={multiline} textAlign=\"right\" /></View>;\n}"
+          new = "function Field({ label, value, onChangeText, placeholder, keyboardType = 'default', secureTextEntry = false, multiline = false }) {\n  return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput style={[styles.input, multiline && styles.textarea]} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor=\"#94a3b8\" keyboardType={keyboardType} secureTextEntry={secureTextEntry} multiline={multiline} textAlign=\"right\" />{label.includes('*') ? <Text style={styles.requiredHint}>* حقل إجباري</Text> : null}</View>;\n}"
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          old_payload = "const payload = () => ({ name: form.name.trim(), phone: form.phone.trim(), national_id: form.national_id.trim(), email: form.email.trim(), notes: form.notes.trim(), apartments: form.apartmentsText.split(/[،,\\n]+/).map((n) => n.trim()).filter(Boolean).map((number) => ({ number })) });"
+          new_payload = "const payload = () => ({ name: form.name.trim(), phone: form.phone.trim(), national_id: form.national_id.trim(), email: form.email.trim(), notes: form.notes.trim(), apartments: form.apartmentsText.split(/[،,\\n]+/).map((n) => n.trim()).filter(Boolean).map((number) => ({ number })) });\n  const setApartmentNumbers = (value) => setField('apartmentsText', value.replace(/[^0-9،,\\n\\s]/g, ''));"
+          if new_payload not in s:
+              if old_payload not in s:
+                  raise SystemExit('payload target not found')
+              s = s.replace(old_payload, new_payload, 1)
+
+          old_save = "if (!data.name || data.apartments.length === 0) return Alert.alert('تنبيه', 'أدخل اسم المالك ورقم شقة واحد على الأقل');"
+          new_save = "if (!data.name || data.apartments.length === 0) return Alert.alert('تنبيه', 'أدخل اسم المالك ورقم شقة واحد على الأقل'); if (data.apartments.some((apartment) => !/^\\d+$/.test(apartment.number))) return Alert.alert('تنبيه', 'رقم الشقة يجب أن يكون أرقام فقط');"
+          if new_save not in s:
+              if old_save not in s:
+                  raise SystemExit('save validation target not found')
+              s = s.replace(old_save, new_save, 1)
+
+          for old_field in [
+              "<Field label=\"الشقق\" value={form.apartmentsText} onChangeText={(v) => setField('apartmentsText', v)} placeholder=\"مثال: 1، 2، 3\" />",
+              "<Field label=\"رقم الشقة *\" value={form.apartmentsText} onChangeText={(v) => setField('apartmentsText', v)} placeholder=\"مطلوب - مثال: 1، 2، 3\" />"
+          ]:
+              if old_field in s:
+                  s = s.replace(old_field, "<Field label=\"رقم الشقة *\" value={form.apartmentsText} onChangeText={setApartmentNumbers} placeholder=\"مطلوب - أرقام فقط مثال: 1، 2، 3\" keyboardType=\"numeric\" />", 1)
+                  break
+          else:
+              if 'onChangeText={setApartmentNumbers}' not in s:
+                  raise SystemExit('apartment field target not found')
+
+          if "requiredHint:" not in s:
+              marker = "field: { marginBottom: 12 }, label:"
+              if marker not in s:
+                  raise SystemExit('style marker not found')
+              s = s.replace(marker, "field: { marginBottom: 12 }, requiredHint: { color: '#ef4444', fontSize: 11, fontWeight: '800', textAlign: 'right', marginTop: 4 }, label:", 1)
+
+          p.write_text(s)
+          PY
+      - name: Remove temporary workflow
+        run: rm -f .github/workflows/patch-owner-apartment-numeric.yml
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bm-mobile/App.js .github/workflows/patch-owner-apartment-numeric.yml
+          git commit -m "Restrict owner apartment numbers to digits" || exit 0
+          git push
