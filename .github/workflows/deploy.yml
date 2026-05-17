@@ -135,6 +135,7 @@ jobs:
               php artisan db:seed --force || true
               php artisan storage:link || true
               php artisan optimize || true
+              php artisan route:list --path=health || true
             fi
           else
             echo "No Laravel API composer.json found yet at $API_DIR. Skipping API deployment steps."
@@ -160,6 +161,19 @@ jobs:
           if [ -d "$API_DIR/storage" ] || [ -d "$API_DIR/bootstrap/cache" ]; then
             mkdir -p "$API_DIR/storage" "$API_DIR/bootstrap/cache"
             chmod -R ug+rwX "$API_DIR/storage" "$API_DIR/bootstrap/cache" || true
+          fi
+
+          echo "Checking BM API health locally"
+          if command -v curl >/dev/null 2>&1; then
+            curl -k -I "${BM_APP_URL:-https://bm.pm.sa}/api/health" || true
+            curl -k "${BM_APP_URL:-https://bm.pm.sa}/api/health" || true
+          fi
+
+          echo "Recent Laravel log"
+          if [ -f "$API_DIR/storage/logs/laravel.log" ]; then
+            tail -n 80 "$API_DIR/storage/logs/laravel.log" || true
+          else
+            echo "No Laravel log file found"
           fi
 
           echo "BM deploy completed"
