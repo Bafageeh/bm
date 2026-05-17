@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BuildingController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\ExpenseCategoryController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\OwnerController;
 use App\Http\Controllers\Api\PaymentController;
@@ -33,6 +34,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/buildings/{building}/expenses', [ExpenseController::class, 'store']);
     Route::put('/buildings/{building}/expenses/{expense}', [ExpenseController::class, 'update']);
     Route::delete('/buildings/{building}/expenses/{expense}', [ExpenseController::class, 'destroy']);
+
+    Route::get('/buildings/{building}/expense-categories', [ExpenseCategoryController::class, 'index']);
+    Route::post('/buildings/{building}/expense-categories', [ExpenseCategoryController::class, 'store']);
+    Route::put('/buildings/{building}/expense-categories/{category}', [ExpenseCategoryController::class, 'update']);
+    Route::delete('/buildings/{building}/expense-categories/{category}', [ExpenseCategoryController::class, 'destroy']);
 
     Route::get('/buildings/{building}/payments', [PaymentController::class, 'index']);
     Route::post('/buildings/{building}/payments', [PaymentController::class, 'store']);
