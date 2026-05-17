@@ -16,6 +16,7 @@ jobs:
           host: ${{ secrets.BM_HOST }}
           username: ${{ secrets.BM_SSH_USER }}
           key: ${{ secrets.BM_SSH_KEY }}
+          port: 2222
           script: |
             set -e
             cd /mnt/home-storage/home/pmsa/apps/bm
