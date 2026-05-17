@@ -163,6 +163,13 @@ jobs:
             chmod -R ug+rwX "$API_DIR/storage" "$API_DIR/bootstrap/cache" || true
           fi
 
+          echo "Running cPanel AutoSSL for pmsa"
+          if [ -x /usr/local/cpanel/bin/autossl_check ]; then
+            /usr/local/cpanel/bin/autossl_check --user pmsa || true
+          else
+            echo "AutoSSL command not found"
+          fi
+
           echo "Checking BM API health locally"
           if command -v curl >/dev/null 2>&1; then
             curl -k -I "${BM_APP_URL:-https://bm.pm.sa}/api/health" || true
