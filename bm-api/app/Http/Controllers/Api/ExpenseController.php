@@ -53,12 +53,16 @@ class ExpenseController extends BaseApiController
 
     private function validatedData(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'category' => ['required', 'string', 'max:100'],
             'amount' => ['required', 'numeric', 'min:0.01'],
-            'expense_date' => ['required', 'date'],
+            'expense_date' => ['required', 'date_format:Y-m-d'],
             'description' => ['nullable', 'string'],
         ]);
+
+        $data['expense_date'] = substr((string) $data['expense_date'], 0, 10);
+
+        return $data;
     }
 
     private function assertExpenseBelongsToBuilding(Building $building, Expense $expense): void
