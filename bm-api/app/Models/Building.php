@@ -51,4 +51,9 @@ class Building extends Model
     {
         return $this->hasMany(OwnerPayment::class);
     }
+
+    public function expenseCategories(): HasMany
+    {
+        return $this->hasMany(ExpenseCategory::class);
+    }
 }
