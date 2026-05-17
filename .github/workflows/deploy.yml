@@ -90,6 +90,10 @@ jobs:
           command -v git >/dev/null 2>&1 || { echo "git is not installed on server"; exit 1; }
           mkdir -p "$(dirname "$PROJECT_PATH")"
 
+          git config --global --add safe.directory "$PROJECT_PATH" || true
+          git config --global --add safe.directory "$API_DIR" || true
+          git config --global --add safe.directory "$MOBILE_DIR" || true
+
           if [ -d "$PROJECT_PATH/.git" ]; then
             cd "$PROJECT_PATH"
             git remote set-url origin "$REPO_URL" || true
