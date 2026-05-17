@@ -1,5 +1,6 @@
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
+const path = require('path');
 
 const cwd = process.cwd();
 const isServer = cwd.includes('/home/pmsa/apps/bm/bm-mobile') || cwd.includes('/mnt/home-storage/home/pmsa/apps/bm/bm-mobile');
@@ -19,6 +20,16 @@ for (const dir of [cacheDir, tmpDir]) {
 function log(message) {
   try { fs.appendFileSync(logPath, `[restart-expo] ${message}\n`); } catch (_) {}
   console.log(message);
+}
+
+try {
+  const injector = path.join(cwd, 'scripts', 'add-screen-numbers.js');
+  if (fs.existsSync(injector)) {
+    require(injector);
+    log('Screen numbers injected before Expo restart');
+  }
+} catch (error) {
+  log(`Screen number injection failed: ${error.message}`);
 }
 
 try {
