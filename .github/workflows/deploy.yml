@@ -149,9 +149,9 @@ jobs:
             echo "React Native mobile project detected at $MOBILE_DIR"
             cd "$MOBILE_DIR"
             if [ -f package-lock.json ]; then
-              npm ci
+              npm ci --legacy-peer-deps --no-audit --no-fund
             else
-              npm install
+              npm install --legacy-peer-deps --no-audit --no-fund
             fi
             echo "Mobile dependencies installed. APK/EAS builds are intentionally not run automatically."
           else
@@ -165,6 +165,20 @@ jobs:
           if [ -d "$API_DIR/storage" ] || [ -d "$API_DIR/bootstrap/cache" ]; then
             mkdir -p "$API_DIR/storage" "$API_DIR/bootstrap/cache"
             chmod -R ug+rwX "$API_DIR/storage" "$API_DIR/bootstrap/cache" || true
+          fi
+
+          if [ -f "$MOBILE_DIR/scripts/restart-expo.js" ]; then
+            echo "Restarting BM Expo on port 8084"
+            if [ "$(id -u)" = "0" ] && id pmsa >/dev/null 2>&1; then
+              if command -v runuser >/dev/null 2>&1; then
+                runuser -u pmsa -- bash -lc "cd '$MOBILE_DIR' && node scripts/restart-expo.js" || true
+              else
+                su -s /bin/bash pmsa -c "cd '$MOBILE_DIR' && node scripts/restart-expo.js" || true
+              fi
+            else
+              cd "$MOBILE_DIR"
+              node scripts/restart-expo.js || true
+            fi
           fi
 
           echo "Running cPanel AutoSSL for pmsa"
