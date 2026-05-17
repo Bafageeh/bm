@@ -149,9 +149,6 @@ jobs:
             echo "React Native mobile project detected at $MOBILE_DIR"
             cd "$MOBILE_DIR"
 
-            # Metro was loading a stale/corrupted React Native install on the server:
-            # Unable to resolve ./Libraries/Utilities/warnOnce from react-native/index.js.
-            # git clean -fd does not remove ignored node_modules, so force a clean mobile install here.
             rm -rf .expo .metro-cache node_modules/.cache node_modules/react-native node_modules/expo/node_modules/react-native 2>/dev/null || true
 
             if [ -f package-lock.json ]; then
@@ -168,7 +165,12 @@ jobs:
               node -e "const fs=require('fs'); const p='node_modules/react-native/Libraries/Utilities'; const ok=['warnOnce.js','warnOnce.ts','warnOnce.native.js'].some(f=>fs.existsSync(p+'/'+f)); if(!ok){console.error('Missing React Native warnOnce after reinstall'); process.exit(1)}"
             fi
 
-            echo "Mobile dependencies installed and verified. APK/EAS builds are intentionally not run automatically."
+            if [ -f scripts/add-screen-numbers.js ]; then
+              echo "Injecting BM screen numbers into App.js"
+              node scripts/add-screen-numbers.js || true
+            fi
+
+            echo "Mobile dependencies installed, screen numbers injected, and verified. APK/EAS builds are intentionally not run automatically."
           else
             echo "No React Native package.json found yet at $MOBILE_DIR. Skipping mobile dependency steps."
           fi
