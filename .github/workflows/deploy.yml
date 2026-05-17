@@ -148,12 +148,27 @@ jobs:
           if [ -f "$MOBILE_DIR/package.json" ]; then
             echo "React Native mobile project detected at $MOBILE_DIR"
             cd "$MOBILE_DIR"
+
+            # Metro was loading a stale/corrupted React Native install on the server:
+            # Unable to resolve ./Libraries/Utilities/warnOnce from react-native/index.js.
+            # git clean -fd does not remove ignored node_modules, so force a clean mobile install here.
+            rm -rf .expo .metro-cache node_modules/.cache node_modules/react-native node_modules/expo/node_modules/react-native 2>/dev/null || true
+
             if [ -f package-lock.json ]; then
               npm ci --legacy-peer-deps --no-audit --no-fund
             else
               npm install --legacy-peer-deps --no-audit --no-fund
             fi
-            echo "Mobile dependencies installed. APK/EAS builds are intentionally not run automatically."
+
+            if ! node -e "const fs=require('fs'); const p='node_modules/react-native/Libraries/Utilities'; const ok=['warnOnce.js','warnOnce.ts','warnOnce.native.js'].some(f=>fs.existsSync(p+'/'+f)); if(!ok){process.exit(1)}"; then
+              echo "React Native dependency is incomplete. Reinstalling bm-mobile node_modules from scratch."
+              rm -rf node_modules package-lock.json
+              npm cache verify || true
+              npm install --legacy-peer-deps --no-audit --no-fund
+              node -e "const fs=require('fs'); const p='node_modules/react-native/Libraries/Utilities'; const ok=['warnOnce.js','warnOnce.ts','warnOnce.native.js'].some(f=>fs.existsSync(p+'/'+f)); if(!ok){console.error('Missing React Native warnOnce after reinstall'); process.exit(1)}"
+            fi
+
+            echo "Mobile dependencies installed and verified. APK/EAS builds are intentionally not run automatically."
           else
             echo "No React Native package.json found yet at $MOBILE_DIR. Skipping mobile dependency steps."
           fi
