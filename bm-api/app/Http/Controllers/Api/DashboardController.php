@@ -24,6 +24,7 @@ class DashboardController extends BaseApiController
                 'name' => $building->name,
                 'district' => $building->district,
                 'city' => $building->city,
+                'annual_cycle_starts_on' => optional($building->annual_cycle_starts_on)->format('Y-m-d'),
             ],
             'stats' => $stats,
             'owners' => $owners,
@@ -50,6 +51,7 @@ class DashboardController extends BaseApiController
                         'name' => $building->name,
                         'district' => $building->district,
                         'city' => $building->city,
+                        'annual_cycle_starts_on' => optional($building->annual_cycle_starts_on)->format('Y-m-d'),
                     ],
                     'summary' => $summary,
                     'expenses' => $building->expenses()->latest('expense_date')->get()->map(function ($expense) use ($building, $owner) {
