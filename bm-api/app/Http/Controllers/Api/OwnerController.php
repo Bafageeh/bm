@@ -114,8 +114,17 @@ class OwnerController extends BaseApiController
             'email' => ['nullable', 'email', 'max:255'],
             'notes' => ['nullable', 'string'],
             'apartments' => ['required', 'array', 'min:1'],
-            'apartments.*.number' => ['required', 'string', 'max:50'],
+            'apartments.*.number' => ['required', 'string', 'regex:/^[0-9]+$/', 'max:50'],
             'apartments.*.floor' => ['nullable', 'string', 'max:50'],
+        ], [
+            'name.required' => 'اسم المالك مطلوب.',
+            'national_id.required' => 'رقم الهوية أو اسم الدخول مطلوب.',
+            'email.email' => 'صيغة البريد الإلكتروني غير صحيحة.',
+            'apartments.required' => 'رقم الشقة مطلوب.',
+            'apartments.array' => 'رقم الشقة مطلوب.',
+            'apartments.min' => 'أدخل رقم شقة واحد على الأقل.',
+            'apartments.*.number.required' => 'رقم الشقة مطلوب.',
+            'apartments.*.number.regex' => 'رقم الشقة يجب أن يكون أرقام فقط.',
         ]);
     }
 
@@ -149,8 +158,16 @@ class OwnerController extends BaseApiController
 
         if (count($data['apartments']) === 0) {
             throw ValidationException::withMessages([
-                'apartments' => ['أدخل رقم شقة صحيح.'],
+                'apartments' => ['رقم الشقة مطلوب.'],
             ]);
+        }
+
+        foreach ($data['apartments'] as $apartment) {
+            if (! preg_match('/^[0-9]+$/', $apartment['number'])) {
+                throw ValidationException::withMessages([
+                    'apartments' => ['رقم الشقة يجب أن يكون أرقام فقط.'],
+                ]);
+            }
         }
 
         return $data;
