@@ -1,6 +1,5 @@
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
-const path = require('path');
 
 const cwd = process.cwd();
 const isServer = cwd.includes('/home/pmsa/apps/bm/bm-mobile') || cwd.includes('/mnt/home-storage/home/pmsa/apps/bm/bm-mobile');
@@ -15,6 +14,39 @@ const tmpDir = '/home/pmsa/apps/.tmp';
 
 for (const dir of [cacheDir, tmpDir]) {
   try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+}
+
+function log(message) {
+  try { fs.appendFileSync(logPath, `[restart-expo] ${message}\n`); } catch (_) {}
+  console.log(message);
+}
+
+function packageVersion(name) {
+  try {
+    const pkg = require(`${cwd}/node_modules/${name}/package.json`);
+    return pkg.version || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+const desiredReact = '19.1.0';
+const desiredRN = '0.81.5';
+const currentReact = packageVersion('react');
+const currentRN = packageVersion('react-native');
+
+if (currentReact !== desiredReact || currentRN !== desiredRN) {
+  log(`Fixing package versions. react=${currentReact || 'missing'} rn=${currentRN || 'missing'}`);
+  try {
+    execSync(`npm install react@${desiredReact} react-native@${desiredRN} --legacy-peer-deps --ignore-scripts --no-audit --no-fund`, {
+      cwd,
+      stdio: 'inherit',
+      shell: '/bin/bash',
+      env: { ...process.env, BM_SKIP_EXPO_RESTART: '1' },
+    });
+  } catch (error) {
+    log(`Package fix failed: ${error.message}`);
+  }
 }
 
 try {
@@ -41,4 +73,4 @@ const child = spawn('npx', ['expo', 'start', '--clear', '--go', '--host', 'lan',
 });
 
 child.unref();
-console.log('BM Expo restart requested on port 8084');
+log('BM Expo restart requested on port 8084');
