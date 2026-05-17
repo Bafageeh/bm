@@ -45,17 +45,29 @@ abstract class BaseApiController extends Controller
 
     protected function buildingStats(Building $building): array
     {
-        $apartmentCount = max(1, $building->apartments()->count());
+        $actualApartmentCount = $building->apartments()->count();
+        $apartmentCount = max(1, $actualApartmentCount);
         $totalExpenses = (float) $building->expenses()->sum('amount');
         $totalPayments = (float) $building->payments()->sum('amount');
         $sharePerApartment = $totalExpenses / $apartmentCount;
+        $unassignedApartmentNumbers = $building->apartments()
+            ->whereNull('owner_id')
+            ->orderByRaw('CAST(number AS UNSIGNED), number')
+            ->pluck('number')
+            ->values();
+        $unassignedApartmentCount = $unassignedApartmentNumbers->count();
+        $unassignedApartmentAmount = $sharePerApartment * $unassignedApartmentCount;
 
         return [
             'apartment_count' => $apartmentCount,
+            'actual_apartment_count' => $actualApartmentCount,
             'total_expenses' => round($totalExpenses, 2),
             'total_payments' => round($totalPayments, 2),
             'building_balance' => round($totalPayments - $totalExpenses, 2),
             'share_per_apartment' => round($sharePerApartment, 2),
+            'unassigned_apartment_count' => $unassignedApartmentCount,
+            'unassigned_apartment_amount' => round($unassignedApartmentAmount, 2),
+            'unassigned_apartments' => $unassignedApartmentNumbers,
         ];
     }
 
@@ -66,6 +78,7 @@ abstract class BaseApiController extends Controller
         $ownerShare = $stats['share_per_apartment'] * $apartmentCount;
         $payments = (float) $owner->payments()->sum('amount');
         $balance = $payments - $ownerShare;
+        $unpaidAmount = max(0, $ownerShare - $payments);
 
         return [
             'id' => $owner->id,
@@ -77,9 +90,10 @@ abstract class BaseApiController extends Controller
             'user_id' => $owner->user_id,
             'login' => $owner->national_id ?: ($owner->phone ?: ($owner->email ?: $owner->user?->username)),
             'apartment_count' => $apartmentCount,
-            'apartments' => $owner->apartments()->orderBy('number')->pluck('number'),
+            'apartments' => $owner->apartments()->orderByRaw('CAST(number AS UNSIGNED), number')->pluck('number'),
             'total_payments' => round($payments, 2),
             'expense_share' => round($ownerShare, 2),
+            'unpaid_amount' => round($unpaidAmount, 2),
             'balance' => round($balance, 2),
             'status' => $balance > 0 ? 'surplus' : ($balance < 0 ? 'due' : 'balanced'),
         ];
