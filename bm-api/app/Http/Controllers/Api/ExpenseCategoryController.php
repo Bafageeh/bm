@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Building;
 use App\Models\ExpenseCategory;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class ExpenseCategoryController extends BaseApiController
@@ -13,6 +15,7 @@ class ExpenseCategoryController extends BaseApiController
 
     public function index(Request $request, Building $building)
     {
+        $this->ensureTableExists();
         $this->assertCanAccessBuilding($request, $building);
         $this->ensureDefaultCategories($building);
 
@@ -26,6 +29,7 @@ class ExpenseCategoryController extends BaseApiController
 
     public function store(Request $request, Building $building)
     {
+        $this->ensureTableExists();
         $this->assertManagerOrAdmin($request, $building);
 
         $data = $request->validate([
@@ -42,6 +46,7 @@ class ExpenseCategoryController extends BaseApiController
 
     public function update(Request $request, Building $building, ExpenseCategory $category)
     {
+        $this->ensureTableExists();
         $this->assertManagerOrAdmin($request, $building);
         $this->assertCategoryBelongsToBuilding($building, $category);
 
@@ -56,12 +61,29 @@ class ExpenseCategoryController extends BaseApiController
 
     public function destroy(Request $request, Building $building, ExpenseCategory $category)
     {
+        $this->ensureTableExists();
         $this->assertManagerOrAdmin($request, $building);
         $this->assertCategoryBelongsToBuilding($building, $category);
 
         $category->delete();
 
         return response()->json(['message' => 'تم حذف التصنيف']);
+    }
+
+    private function ensureTableExists(): void
+    {
+        if (Schema::hasTable('expense_categories')) {
+            return;
+        }
+
+        Schema::create('expense_categories', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('building_id')->constrained()->cascadeOnDelete();
+            $table->string('name', 100);
+            $table->unsignedInteger('sort_order')->default(0);
+            $table->timestamps();
+            $table->unique(['building_id', 'name']);
+        });
     }
 
     private function ensureDefaultCategories(Building $building): void
