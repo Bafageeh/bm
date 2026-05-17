@@ -23,13 +23,24 @@ function log(message) {
 }
 
 try {
-  const injector = path.join(cwd, 'scripts', 'add-screen-numbers.js');
-  if (fs.existsSync(injector)) {
-    require(injector);
+  const numberInjector = path.join(cwd, 'scripts', 'add-screen-numbers.js');
+  if (fs.existsSync(numberInjector)) {
+    require(numberInjector);
     log('Screen numbers injected before Expo restart');
   }
 } catch (error) {
   log(`Screen number injection failed: ${error.message}`);
+}
+
+try {
+  const expensesPatch = path.join(cwd, 'scripts', 'patch-expenses-screen.js');
+  if (fs.existsSync(expensesPatch)) {
+    delete require.cache[require.resolve(expensesPatch)];
+    require(expensesPatch);
+    log('Expenses screen management patch applied before Expo restart');
+  }
+} catch (error) {
+  log(`Expenses screen patch failed: ${error.message}`);
 }
 
 try {
