@@ -13,10 +13,10 @@ jobs:
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
         with:
-        host: ${{ secrets.BM_SSH_HOST }}
-        username: ${{ secrets.BM_SSH_USER }}
-        key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
-        port: "${{ secrets.BM_SSH_PORT }}"
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
           script: |
             set -e
             cd /mnt/home-storage/home/pmsa/apps/bm
