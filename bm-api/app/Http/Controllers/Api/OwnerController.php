@@ -34,11 +34,11 @@ class OwnerController extends BaseApiController
         $login = $this->ownerLogin($data);
 
         $owner = DB::transaction(function () use ($building, $data, $login) {
-            $user = $login ? $this->findOrCreateOwnerUser($data, $login) : null;
+            $user = $this->findOrCreateOwnerUser($data, $login);
 
             $owner = Owner::create([
                 'building_id' => $building->id,
-                'user_id' => $user?->id,
+                'user_id' => $user->id,
                 'name' => $data['name'],
                 'national_id' => $data['national_id'],
                 'phone' => $data['phone'],
@@ -54,7 +54,7 @@ class OwnerController extends BaseApiController
 
         return response()->json([
             'data' => $this->ownerSummary($building, $owner->fresh(['apartments', 'payments', 'user'])),
-            'default_password' => $login ? '123456' : null,
+            'default_password' => '123456',
         ], 201);
     }
 
@@ -68,10 +68,10 @@ class OwnerController extends BaseApiController
         $login = $this->ownerLogin($data);
 
         $owner = DB::transaction(function () use ($building, $owner, $data, $login) {
-            $user = $login ? $this->findOrCreateOwnerUser($data, $login, $owner->user_id) : null;
+            $user = $this->findOrCreateOwnerUser($data, $login, $owner->user_id);
 
             $owner->update([
-                'user_id' => $user?->id,
+                'user_id' => $user->id,
                 'name' => $data['name'],
                 'national_id' => $data['national_id'],
                 'phone' => $data['phone'],
@@ -87,7 +87,7 @@ class OwnerController extends BaseApiController
 
         return response()->json([
             'data' => $this->ownerSummary($building, $owner->fresh(['apartments', 'payments', 'user'])),
-            'default_password' => $login ? '123456' : null,
+            'default_password' => '123456',
         ]);
     }
 
@@ -109,7 +109,7 @@ class OwnerController extends BaseApiController
     {
         return $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'national_id' => ['nullable', 'string', 'max:50'],
+            'national_id' => ['required', 'string', 'max:50'],
             'phone' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
             'notes' => ['nullable', 'string'],
@@ -124,6 +124,12 @@ class OwnerController extends BaseApiController
         foreach (['name', 'national_id', 'phone', 'email', 'notes'] as $key) {
             $value = trim((string) ($data[$key] ?? ''));
             $data[$key] = $value !== '' ? $value : null;
+        }
+
+        if (! $data['national_id']) {
+            throw ValidationException::withMessages([
+                'national_id' => ['رقم هوية المالك مطلوب ويستخدم كاسم دخول.'],
+            ]);
         }
 
         $data['apartments'] = collect($data['apartments'] ?? [])
@@ -178,32 +184,47 @@ class OwnerController extends BaseApiController
         }
     }
 
-    private function ownerLogin(array $data): ?string
+    private function ownerLogin(array $data): string
     {
-        return $data['national_id'] ?: ($data['phone'] ?: $data['email']);
+        return (string) $data['national_id'];
     }
 
     private function findOrCreateOwnerUser(array $data, string $login, ?int $currentUserId = null): User
     {
-        $user = User::query()
+        $currentUser = $currentUserId ? User::find($currentUserId) : null;
+
+        $loginUser = User::query()
             ->where(function ($query) use ($login) {
                 $query->where('username', $login)
                     ->orWhere('phone', $login)
                     ->orWhere('email', $login);
             })
-            ->when($currentUserId, fn ($query) => $query->orWhereKey($currentUserId))
             ->first();
+
+        $user = $currentUser ?: $loginUser;
+
+        if ($loginUser && $currentUser && (int) $loginUser->id !== (int) $currentUser->id) {
+            if (! $loginUser->isOwner()) {
+                throw ValidationException::withMessages([
+                    'national_id' => ['رقم الهوية مستخدم لحساب مدير. استخدم رقم هوية مختلف للمالك.'],
+                ]);
+            }
+
+            throw ValidationException::withMessages([
+                'national_id' => ['رقم الهوية مستخدم لمالك آخر.'],
+            ]);
+        }
 
         if ($user && ! $user->isOwner()) {
             throw ValidationException::withMessages([
-                'national_id' => ['رقم الهوية أو اسم الدخول مستخدم لحساب مدير. استخدم رقم هوية/جوال مختلف للمالك.'],
+                'national_id' => ['رقم الهوية أو اسم الدخول مستخدم لحساب مدير. استخدم رقم هوية مختلف للمالك.'],
             ]);
         }
 
         if (! $user) {
             return User::create([
                 'name' => $data['name'],
-                'email' => $this->safeEmail($data['email'], $currentUserId),
+                'email' => $this->emailForUser($data['email'], $login),
                 'username' => $login,
                 'phone' => $data['phone'],
                 'role' => 'owner',
@@ -220,8 +241,9 @@ class OwnerController extends BaseApiController
             'phone' => $data['phone'],
         ];
 
-        if ($data['email'] && $this->safeEmail($data['email'], $user->id)) {
-            $updates['email'] = $data['email'];
+        $email = $this->emailForUser($data['email'], $login, $user->id);
+        if ($email) {
+            $updates['email'] = $email;
         }
 
         $user->forceFill($updates)->save();
@@ -229,14 +251,18 @@ class OwnerController extends BaseApiController
         return $user;
     }
 
-    private function safeEmail(?string $email, ?int $exceptUserId = null): ?string
+    private function emailForUser(?string $email, string $login, ?int $exceptUserId = null): string
     {
-        if (! $email) {
-            return null;
+        if ($email && ! User::where('email', $email)->when($exceptUserId, fn ($query) => $query->whereKeyNot($exceptUserId))->exists()) {
+            return $email;
         }
 
-        return User::where('email', $email)
-            ->when($exceptUserId, fn ($query) => $query->whereKeyNot($exceptUserId))
-            ->exists() ? null : $email;
+        $generatedEmail = 'owner-' . sha1($login) . '@bm.local';
+
+        if (! User::where('email', $generatedEmail)->when($exceptUserId, fn ($query) => $query->whereKeyNot($exceptUserId))->exists()) {
+            return $generatedEmail;
+        }
+
+        return 'owner-' . sha1($login . '-' . ($exceptUserId ?: uniqid('', true))) . '@bm.local';
     }
 }
