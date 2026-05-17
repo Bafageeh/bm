@@ -1,24 +1,2 @@
-const fs = require('fs');
-const path = require('path');
-
-const appPath = path.resolve(__dirname, '..', 'App.js');
-let source = fs.readFileSync(appPath, 'utf8');
-
-if (source.includes('annualCycleStartsOn')) {
-  console.log('#S-006 annual cycle start date field already exists.');
-  process.exit(0);
-}
-
-const start = source.indexOf('function BuildingSettingsScreen({ token, buildingId, dashboard, reload, setTab })');
-const end = source.indexOf('\n\nfunction OwnerOnlyScreen', start);
-
-if (start === -1 || end === -1) {
-  console.log('Skipped #S-006 patch: BuildingSettingsScreen was not found.');
-  process.exit(0);
-}
-
-const newSnippet = "function BuildingSettingsScreen({ token, buildingId, dashboard, reload, setTab }) { const [apartmentCount, setApartmentCount] = useState(String(dashboard?.stats?.apartment_count || '')); const [annualCycleStartsOn, setAnnualCycleStartsOn] = useState(dashboard?.building?.annual_cycle_starts_on || ''); const [loading, setLoading] = useState(false); useEffect(() => { setApartmentCount(String(dashboard?.stats?.apartment_count || '')); setAnnualCycleStartsOn(dashboard?.building?.annual_cycle_starts_on || ''); }, [dashboard?.stats?.apartment_count, dashboard?.building?.annual_cycle_starts_on]); const save = async () => { const count = Number(apartmentCount); const dateValue = annualCycleStartsOn.trim(); if (!Number.isInteger(count) || count < 0) return Alert.alert('تنبيه', 'أدخل عدد الشقق بشكل صحيح'); if (dateValue && !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateValue)) return Alert.alert('تنبيه', 'أدخل تاريخ بداية الدورة بصيغة 2026-01-01'); try { setLoading(true); await request(`/buildings/${buildingId}/apartment-count`, { method: 'PUT', body: JSON.stringify({ apartment_count: count, annual_cycle_starts_on: dateValue || null }) }, token); await reload(); Alert.alert('تم', 'تم حفظ إعدادات المبنى'); setTab('settings'); } catch (e) { Alert.alert('تعذر حفظ إعدادات المبنى', e.message); } finally { setLoading(false); } }; return <ScrollView contentContainerStyle={styles.screenContent}><ScreenCode code=\"#S-006\" /><SectionTitle icon=\"business-outline\" title=\"إعدادات المبنى\" /><View style={styles.formCard}><Field label=\"عدد الشقق\" value={apartmentCount} onChangeText={setApartmentCount} keyboardType=\"numeric\" placeholder=\"مثال: 12\" /><Field label=\"تاريخ بداية الدورة السنوية\" value={annualCycleStartsOn} onChangeText={setAnnualCycleStartsOn} keyboardType=\"numbers-and-punctuation\" placeholder=\"مثال: 2026-01-01\" /><Text style={styles.settingsHint}>تاريخ بداية الدورة يحدد بداية السنة المالية للمصروفات والتقارير. اكتب التاريخ بالميلادي بصيغة سنة-شهر-يوم.</Text><Text style={styles.settingsHint}>عند زيادة العدد سيتم إنشاء الشقق الناقصة تلقائيًا بأرقام متسلسلة.</Text><PrimaryButton title=\"حفظ إعدادات المبنى\" icon=\"save-outline\" onPress={save} loading={loading} /><PrimaryButton title=\"رجوع للإعدادات\" icon=\"arrow-forward-outline\" onPress={() => setTab('settings')} variant=\"light\" /></View></ScrollView>; }";
-
-source = source.slice(0, start) + newSnippet + source.slice(end);
-fs.writeFileSync(appPath, source);
-console.log('Patched #S-006 annual cycle start date field.');
+console.log('Skipping building cycle patch script.');
+process.exit(0);
