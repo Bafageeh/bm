@@ -21,34 +21,6 @@ function log(message) {
   console.log(message);
 }
 
-function packageVersion(name) {
-  try {
-    const pkg = require(`${cwd}/node_modules/${name}/package.json`);
-    return pkg.version || '';
-  } catch (_) {
-    return '';
-  }
-}
-
-const desiredReact = '19.1.0';
-const desiredRN = '0.81.5';
-const currentReact = packageVersion('react');
-const currentRN = packageVersion('react-native');
-
-if (currentReact !== desiredReact || currentRN !== desiredRN) {
-  log(`Fixing package versions. react=${currentReact || 'missing'} rn=${currentRN || 'missing'}`);
-  try {
-    execSync(`npm install react@${desiredReact} react-native@${desiredRN} --legacy-peer-deps --ignore-scripts --no-audit --no-fund`, {
-      cwd,
-      stdio: 'inherit',
-      shell: '/bin/bash',
-      env: { ...process.env, BM_SKIP_EXPO_RESTART: '1' },
-    });
-  } catch (error) {
-    log(`Package fix failed: ${error.message}`);
-  }
-}
-
 try {
   execSync("lsof -tiTCP:8084 -sTCP:LISTEN | xargs -r kill -9", { stdio: 'ignore', shell: '/bin/bash' });
 } catch (_) {}
