@@ -25,6 +25,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/buildings/{building}/owners', [OwnerController::class, 'index']);
     Route::post('/buildings/{building}/owners', [OwnerController::class, 'store']);
+    Route::put('/buildings/{building}/owners/{owner}', [OwnerController::class, 'update']);
+    Route::delete('/buildings/{building}/owners/{owner}', [OwnerController::class, 'destroy']);
 
     Route::get('/buildings/{building}/expenses', [ExpenseController::class, 'index']);
     Route::post('/buildings/{building}/expenses', [ExpenseController::class, 'store']);
