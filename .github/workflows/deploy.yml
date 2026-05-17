@@ -26,17 +26,13 @@ jobs:
           BM_SSH_USER: ${{ secrets.BM_SSH_USER }}
         run: |
           set -euo pipefail
-
           test -n "${BM_SSH_PRIVATE_KEY:-}" || { echo "BM_SSH_PRIVATE_KEY is missing"; exit 1; }
           test -n "${BM_SSH_HOST:-}" || { echo "BM_SSH_HOST is missing"; exit 1; }
           test -n "${BM_SSH_USER:-}" || { echo "BM_SSH_USER is missing"; exit 1; }
-
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-
           printf '%s\n' "$BM_SSH_PRIVATE_KEY" > ~/.ssh/bm_deploy_key
           chmod 600 ~/.ssh/bm_deploy_key
-
           if [ -n "${BM_SSH_KNOWN_HOSTS:-}" ]; then
             printf '%s\n' "$BM_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           else
@@ -56,7 +52,6 @@ jobs:
           BM_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-
           ssh -i ~/.ssh/bm_deploy_key \
             -p "${BM_SSH_PORT:-22}" \
             -o StrictHostKeyChecking=yes \
@@ -77,7 +72,6 @@ jobs:
           echo "Branch: $BRANCH"
 
           command -v git >/dev/null 2>&1 || { echo "git is not installed on server"; exit 1; }
-
           mkdir -p "$(dirname "$PROJECT_PATH")"
 
           if [ -d "$PROJECT_PATH/.git" ]; then
@@ -100,17 +94,32 @@ jobs:
             echo "Laravel API project detected at $API_DIR"
             cd "$API_DIR"
 
+            mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache database
+            chmod -R ug+rwX storage bootstrap/cache database || true
+
+            if [ ! -f .env ]; then
+              cp .env.example .env
+              if ! grep -q '^DB_CONNECTION=sqlite' .env; then
+                sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=sqlite/' .env || true
+              fi
+              if grep -q '^DB_DATABASE=' .env; then
+                sed -i 's#^DB_DATABASE=.*#DB_DATABASE=database/database.sqlite#' .env || true
+              else
+                printf '\nDB_DATABASE=database/database.sqlite\n' >> .env
+              fi
+            fi
+
+            touch database/database.sqlite
             composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 
             if [ -f artisan ]; then
+              php artisan key:generate --force || true
               php artisan optimize:clear || true
               php artisan migrate --force || true
+              php artisan db:seed --force || true
               php artisan storage:link || true
               php artisan optimize || true
             fi
-
-            mkdir -p storage bootstrap/cache
-            chmod -R ug+rwX storage bootstrap/cache || true
           else
             echo "No Laravel API composer.json found yet at $API_DIR. Skipping API deployment steps."
           fi
@@ -118,13 +127,11 @@ jobs:
           if [ -f "$MOBILE_DIR/package.json" ]; then
             echo "React Native mobile project detected at $MOBILE_DIR"
             cd "$MOBILE_DIR"
-
             if [ -f package-lock.json ]; then
               npm ci
             else
               npm install
             fi
-
             echo "Mobile dependencies installed. APK/EAS builds are intentionally not run automatically."
           else
             echo "No React Native package.json found yet at $MOBILE_DIR. Skipping mobile dependency steps."
