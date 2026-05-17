@@ -6,217 +6,29 @@ on:
       - main
   workflow_dispatch:
 
-concurrency:
-  group: bm-deploy-main
-  cancel-in-progress: true
-
 jobs:
   deploy:
-    name: Deploy Laravel API and React Native app
     runs-on: ubuntu-latest
-
     steps:
-      - name: Prepare SSH
-        shell: bash
-        env:
-          BM_SSH_PRIVATE_KEY: ${{ secrets.BM_SSH_PRIVATE_KEY }}
-          BM_SSH_KNOWN_HOSTS: ${{ secrets.BM_SSH_KNOWN_HOSTS }}
-          BM_SSH_HOST: ${{ secrets.BM_SSH_HOST }}
-          BM_SSH_PORT: ${{ secrets.BM_SSH_PORT }}
-          BM_SSH_USER: ${{ secrets.BM_SSH_USER }}
-        run: |
-          set -euo pipefail
-          test -n "${BM_SSH_PRIVATE_KEY:-}" || { echo "BM_SSH_PRIVATE_KEY is missing"; exit 1; }
-          test -n "${BM_SSH_HOST:-}" || { echo "BM_SSH_HOST is missing"; exit 1; }
-          test -n "${BM_SSH_USER:-}" || { echo "BM_SSH_USER is missing"; exit 1; }
-
-          SSH_HOST="${BM_SSH_HOST#http://}"
-          SSH_HOST="${SSH_HOST#https://}"
-          SSH_HOST="${SSH_HOST%%/*}"
-          SSH_PORT="${BM_SSH_PORT:-22}"
-
-          test -n "$SSH_HOST" || { echo "BM_SSH_HOST is invalid after normalization"; exit 1; }
-
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$BM_SSH_PRIVATE_KEY" > ~/.ssh/bm_deploy_key
-          chmod 600 ~/.ssh/bm_deploy_key
-
-          : > ~/.ssh/known_hosts
-          if [ -n "${BM_SSH_KNOWN_HOSTS:-}" ]; then
-            printf '%s\n' "$BM_SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-          fi
-          ssh-keyscan -T 20 -p "$SSH_PORT" -t rsa,ecdsa,ed25519 "$SSH_HOST" >> ~/.ssh/known_hosts
-          sort -u ~/.ssh/known_hosts -o ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-
-      - name: Deploy on server
-        shell: bash
-        env:
-          BM_SSH_HOST: ${{ secrets.BM_SSH_HOST }}
-          BM_SSH_PORT: ${{ secrets.BM_SSH_PORT }}
-          BM_SSH_USER: ${{ secrets.BM_SSH_USER }}
-          BM_PROJECT_PATH: ${{ secrets.BM_PROJECT_PATH }}
-          BM_APP_URL: ${{ secrets.BM_APP_URL }}
-          BM_REPO_URL: https://github.com/${{ github.repository }}.git
-          BM_BRANCH: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-
-          SSH_HOST="${BM_SSH_HOST#http://}"
-          SSH_HOST="${SSH_HOST#https://}"
-          SSH_HOST="${SSH_HOST%%/*}"
-          SSH_PORT="${BM_SSH_PORT:-22}"
-
-          ssh -i ~/.ssh/bm_deploy_key \
-            -p "$SSH_PORT" \
-            -o StrictHostKeyChecking=yes \
-            "$BM_SSH_USER@$SSH_HOST" \
-            "BM_PROJECT_PATH='$BM_PROJECT_PATH' BM_REPO_URL='$BM_REPO_URL' BM_BRANCH='$BM_BRANCH' BM_APP_URL='${BM_APP_URL:-}' bash -s" <<'REMOTE'
-          set -euo pipefail
-
-          PROJECT_PATH="${BM_PROJECT_PATH:-/mnt/home-storage/home/pmsa/apps/bm}"
-          API_DIR="$PROJECT_PATH/bm-api"
-          MOBILE_DIR="$PROJECT_PATH/bm-mobile"
-          REPO_URL="${BM_REPO_URL}"
-          BRANCH="${BM_BRANCH:-main}"
-
-          echo "Deploying BM"
-          echo "Repository root: $PROJECT_PATH"
-          echo "Laravel API dir: $API_DIR"
-          echo "React Native dir: $MOBILE_DIR"
-          echo "Branch: $BRANCH"
-
-          command -v git >/dev/null 2>&1 || { echo "git is not installed on server"; exit 1; }
-          mkdir -p "$(dirname "$PROJECT_PATH")"
-
-          git config --global --add safe.directory "$PROJECT_PATH" || true
-          git config --global --add safe.directory "$API_DIR" || true
-          git config --global --add safe.directory "$MOBILE_DIR" || true
-
-          if [ -d "$PROJECT_PATH/.git" ]; then
-            cd "$PROJECT_PATH"
-            git remote set-url origin "$REPO_URL" || true
-            git fetch origin "$BRANCH"
-            git reset --hard "origin/$BRANCH"
-            git clean -fd
-          else
-            if [ -d "$PROJECT_PATH" ] && [ "$(ls -A "$PROJECT_PATH" 2>/dev/null || true)" ]; then
-              BACKUP_PATH="${PROJECT_PATH}.backup.$(date +%Y%m%d%H%M%S)"
-              echo "Existing non-git directory found. Moving it to: $BACKUP_PATH"
-              mv "$PROJECT_PATH" "$BACKUP_PATH"
-            fi
-            git clone --branch "$BRANCH" "$REPO_URL" "$PROJECT_PATH"
-            cd "$PROJECT_PATH"
-          fi
-
-          if [ -f "$API_DIR/composer.json" ]; then
-            echo "Laravel API project detected at $API_DIR"
-            cd "$API_DIR"
-
-            mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache database
-            chmod -R ug+rwX storage bootstrap/cache database || true
-
-            if [ ! -f .env ]; then
-              cp .env.example .env
-              if ! grep -q '^DB_CONNECTION=sqlite' .env; then
-                sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=sqlite/' .env || true
-              fi
-              if grep -q '^DB_DATABASE=' .env; then
-                sed -i 's#^DB_DATABASE=.*#DB_DATABASE=database/database.sqlite#' .env || true
-              else
-                printf '\nDB_DATABASE=database/database.sqlite\n' >> .env
-              fi
-            fi
-
-            touch database/database.sqlite
-            composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
-
-            if [ -f artisan ]; then
-              php artisan key:generate --force || true
-              php artisan optimize:clear || true
-              php artisan migrate --force || true
-              php artisan db:seed --force || true
-              php artisan storage:link || true
-              php artisan optimize || true
-              php artisan route:list --path=health || true
-            fi
-          else
-            echo "No Laravel API composer.json found yet at $API_DIR. Skipping API deployment steps."
-          fi
-
-          if [ -f "$MOBILE_DIR/package.json" ]; then
-            echo "React Native mobile project detected at $MOBILE_DIR"
-            cd "$MOBILE_DIR"
-
-            rm -rf .expo .metro-cache node_modules/.cache node_modules/react-native node_modules/expo/node_modules/react-native 2>/dev/null || true
-
-            if [ -f package-lock.json ]; then
-              npm ci --legacy-peer-deps --no-audit --no-fund
-            else
-              npm install --legacy-peer-deps --no-audit --no-fund
-            fi
-
-            if ! node -e "const fs=require('fs'); const p='node_modules/react-native/Libraries/Utilities'; const ok=['warnOnce.js','warnOnce.ts','warnOnce.native.js'].some(f=>fs.existsSync(p+'/'+f)); if(!ok){process.exit(1)}"; then
-              echo "React Native dependency is incomplete. Reinstalling bm-mobile node_modules from scratch."
-              rm -rf node_modules package-lock.json
-              npm cache verify || true
-              npm install --legacy-peer-deps --no-audit --no-fund
-              node -e "const fs=require('fs'); const p='node_modules/react-native/Libraries/Utilities'; const ok=['warnOnce.js','warnOnce.ts','warnOnce.native.js'].some(f=>fs.existsSync(p+'/'+f)); if(!ok){console.error('Missing React Native warnOnce after reinstall'); process.exit(1)}"
-            fi
-
-            if [ -f scripts/add-screen-numbers.js ]; then
-              echo "Injecting BM screen numbers into App.js"
-              node scripts/add-screen-numbers.js || true
-            fi
-
-            echo "Mobile dependencies installed, screen numbers injected, and verified. APK/EAS builds are intentionally not run automatically."
-          else
-            echo "No React Native package.json found yet at $MOBILE_DIR. Skipping mobile dependency steps."
-          fi
-
-          if id pmsa >/dev/null 2>&1; then
-            chown -R pmsa:pmsa "$PROJECT_PATH" || true
-          fi
-
-          if [ -d "$API_DIR/storage" ] || [ -d "$API_DIR/bootstrap/cache" ]; then
-            mkdir -p "$API_DIR/storage" "$API_DIR/bootstrap/cache"
-            chmod -R ug+rwX "$API_DIR/storage" "$API_DIR/bootstrap/cache" || true
-          fi
-
-          if [ -f "$MOBILE_DIR/scripts/restart-expo.js" ]; then
-            echo "Restarting BM Expo on port 8084"
-            if [ "$(id -u)" = "0" ] && id pmsa >/dev/null 2>&1; then
-              if command -v runuser >/dev/null 2>&1; then
-                runuser -u pmsa -- bash -lc "cd '$MOBILE_DIR' && node scripts/restart-expo.js" || true
-              else
-                su -s /bin/bash pmsa -c "cd '$MOBILE_DIR' && node scripts/restart-expo.js" || true
-              fi
-            else
-              cd "$MOBILE_DIR"
-              node scripts/restart-expo.js || true
-            fi
-          fi
-
-          echo "Running cPanel AutoSSL for pmsa"
-          if [ -x /usr/local/cpanel/bin/autossl_check ]; then
-            /usr/local/cpanel/bin/autossl_check --user pmsa || true
-          else
-            echo "AutoSSL command not found"
-          fi
-
-          echo "Checking BM API health locally"
-          if command -v curl >/dev/null 2>&1; then
-            curl -k -I "${BM_APP_URL:-https://bm.pm.sa}/api/health" || true
-            curl -k "${BM_APP_URL:-https://bm.pm.sa}/api/health" || true
-          fi
-
-          echo "Recent Laravel log"
-          if [ -f "$API_DIR/storage/logs/laravel.log" ]; then
-            tail -n 80 "$API_DIR/storage/logs/laravel.log" || true
-          else
-            echo "No Laravel log file found"
-          fi
-
-          echo "BM deploy completed"
-          REMOTE
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_KEY }}
+          script: |
+            set -e
+            cd /mnt/home-storage/home/pmsa/apps/bm
+            git fetch origin main
+            git reset --hard origin/main
+            cd bm-mobile
+            node scripts/add-screen-numbers.js || true
+            node scripts/group-expenses-screen.js || true
+            pkill -f "8084|expo|metro" || true
+            BROWSER=none EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=bm.pm.sa \
+            XDG_CACHE_HOME=/home/pmsa/apps/.cache \
+            TMPDIR=/home/pmsa/apps/.tmp \
+            TMP=/home/pmsa/apps/.tmp \
+            TEMP=/home/pmsa/apps/.tmp \
+            nohup npx expo start --clear --go --host lan --port 8084 \
+            > /home/pmsa/apps/bm-expo-8084.log 2>&1 &
