@@ -13,9 +13,17 @@ class Building extends Model
         'district',
         'city',
         'address',
+        'annual_cycle_starts_on',
         'status',
         'notes',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'annual_cycle_starts_on' => 'date',
+        ];
+    }
 
     public function managers(): BelongsToMany
     {
