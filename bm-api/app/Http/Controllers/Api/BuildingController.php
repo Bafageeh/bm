@@ -6,6 +6,7 @@ use App\Models\Building;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 class BuildingController extends BaseApiController
 {
@@ -63,5 +64,43 @@ class BuildingController extends BaseApiController
         $this->assertCanAccessBuilding($request, $building);
 
         return ['data' => $building->loadCount(['apartments', 'owners', 'expenses', 'payments'])];
+    }
+
+    public function updateApartmentCount(Request $request, Building $building)
+    {
+        $this->assertManagerOrAdmin($request, $building);
+
+        $data = $request->validate([
+            'apartment_count' => ['required', 'integer', 'min:0', 'max:1000'],
+        ]);
+
+        $targetCount = (int) $data['apartment_count'];
+        $currentCount = $building->apartments()->count();
+
+        if ($targetCount > $currentCount) {
+            $existingNumbers = $building->apartments()->pluck('number')->map(fn ($number) => (string) $number)->all();
+
+            for ($number = 1; $building->apartments()->count() < $targetCount && $number <= 1000; $number++) {
+                if (in_array((string) $number, $existingNumbers, true)) {
+                    continue;
+                }
+
+                $building->apartments()->create([
+                    'number' => (string) $number,
+                    'status' => 'active',
+                ]);
+
+                $existingNumbers[] = (string) $number;
+            }
+        }
+
+        if (Schema::hasColumn('buildings', 'apartment_count')) {
+            $building->forceFill(['apartment_count' => $targetCount])->save();
+        }
+
+        return [
+            'message' => 'تم حفظ عدد الشقق',
+            'data' => $building->loadCount(['apartments', 'owners', 'expenses', 'payments']),
+        ];
     }
 }
