@@ -1,0 +1,54 @@
+name: Patch visible screen codes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-screen-codes.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add screen code badges
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('bm-mobile/App.js')
+          text = path.read_text()
+          if '#S-OWNERS' in text and '#S-ADD-OWNER' in text and '#S-EDIT-OWNER' in text:
+              print('Screen codes already exist')
+              raise SystemExit(0)
+          text = text.replace(
+              '        <SectionTitle icon="settings-outline" title="إدارة الملاك" />\n',
+              '        <View style={styles.screenCodeBadge}>\n          <Text style={styles.screenCodeText}>#S-OWNERS</Text>\n        </View>\n        <SectionTitle icon="settings-outline" title="إدارة الملاك" />\n',
+              1,
+          )
+          text = text.replace(
+              "                <Text style={styles.floatingFormTitle}>{editingOwner ? 'تعديل بيانات المالك' : 'إضافة مالك'}</Text>\n",
+              "                <Text style={styles.screenCodeText}>{editingOwner ? '#S-EDIT-OWNER' : '#S-ADD-OWNER'}</Text>\n                <Text style={styles.floatingFormTitle}>{editingOwner ? 'تعديل بيانات المالك' : 'إضافة مالك'}</Text>\n",
+              1,
+          )
+          text = text.replace(
+              "  sectionText: { fontSize: 17, fontWeight: '900', color: '#0f172a' },\n",
+              "  sectionText: { fontSize: 17, fontWeight: '900', color: '#0f172a' },\n  screenCodeBadge: { alignSelf: 'flex-start', backgroundColor: '#e0f2fe', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 2 },\n  screenCodeText: { color: '#0369a1', fontWeight: '900', fontSize: 11, textAlign: 'right' },\n",
+              1,
+          )
+          path.write_text(text)
+          PY
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bm-mobile/App.js
+          git commit -m "Show screen codes on owners UI"
+          git push
