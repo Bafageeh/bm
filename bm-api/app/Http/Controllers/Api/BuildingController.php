@@ -72,6 +72,7 @@ class BuildingController extends BaseApiController
 
         $data = $request->validate([
             'apartment_count' => ['required', 'integer', 'min:0', 'max:1000'],
+            'annual_cycle_starts_on' => ['nullable', 'date'],
         ]);
 
         $targetCount = (int) $data['apartment_count'];
@@ -94,13 +95,23 @@ class BuildingController extends BaseApiController
             }
         }
 
+        $updateData = [];
+
         if (Schema::hasColumn('buildings', 'apartment_count')) {
-            $building->forceFill(['apartment_count' => $targetCount])->save();
+            $updateData['apartment_count'] = $targetCount;
+        }
+
+        if (Schema::hasColumn('buildings', 'annual_cycle_starts_on')) {
+            $updateData['annual_cycle_starts_on'] = $data['annual_cycle_starts_on'] ?? null;
+        }
+
+        if (! empty($updateData)) {
+            $building->forceFill($updateData)->save();
         }
 
         return [
-            'message' => 'تم حفظ عدد الشقق',
-            'data' => $building->loadCount(['apartments', 'owners', 'expenses', 'payments']),
+            'message' => 'تم حفظ إعدادات المبنى',
+            'data' => $building->fresh()->loadCount(['apartments', 'owners', 'expenses', 'payments']),
         ];
     }
 }
