@@ -31,6 +31,7 @@ class OwnerController extends BaseApiController
 
         $data = $this->validateOwner($request);
         $data = $this->normalizeOwnerData($data);
+        $this->assertUniqueOwnerIdentity($data['national_id']);
         $login = $this->ownerLogin($data);
 
         $owner = DB::transaction(function () use ($building, $data, $login) {
@@ -65,6 +66,7 @@ class OwnerController extends BaseApiController
 
         $data = $this->validateOwner($request);
         $data = $this->normalizeOwnerData($data);
+        $this->assertUniqueOwnerIdentity($data['national_id'], $owner->id, $owner->user_id);
         $login = $this->ownerLogin($data);
 
         $owner = DB::transaction(function () use ($building, $owner, $data, $login) {
@@ -173,6 +175,29 @@ class OwnerController extends BaseApiController
         return $data;
     }
 
+    private function assertUniqueOwnerIdentity(string $login, ?int $exceptOwnerId = null, ?int $exceptUserId = null): void
+    {
+        $ownerExists = Owner::query()
+            ->where('national_id', $login)
+            ->when($exceptOwnerId, fn ($query) => $query->whereKeyNot($exceptOwnerId))
+            ->exists();
+
+        $userExists = User::query()
+            ->where(function ($query) use ($login) {
+                $query->where('username', $login)
+                    ->orWhere('phone', $login)
+                    ->orWhere('email', $login);
+            })
+            ->when($exceptUserId, fn ($query) => $query->whereKeyNot($exceptUserId))
+            ->exists();
+
+        if ($ownerExists || $userExists) {
+            throw ValidationException::withMessages([
+                'national_id' => ['رقم الهوية أو اسم الدخول مستخدم مسبقًا ولا يمكن تكراره.'],
+            ]);
+        }
+    }
+
     private function syncOwnerApartments(Building $building, Owner $owner, array $apartments): void
     {
         $numbers = collect($apartments)->pluck('number')->all();
@@ -243,6 +268,12 @@ class OwnerController extends BaseApiController
 
             throw ValidationException::withMessages([
                 'national_id' => ['رقم الهوية مستخدم لمالك آخر.'],
+            ]);
+        }
+
+        if ($loginUser && ! $currentUser) {
+            throw ValidationException::withMessages([
+                'national_id' => ['رقم الهوية أو اسم الدخول مستخدم مسبقًا ولا يمكن تكراره.'],
             ]);
         }
 
