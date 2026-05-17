@@ -63,8 +63,10 @@ jobs:
     }
 """
           if old not in s:
-              raise SystemExit('OwnerController validateOwner block not found')
-          api.write_text(s.replace(old, new, 1))
+              if "'apartments.*.number.regex'" not in s:
+                  raise SystemExit('OwnerController validateOwner block not found')
+          else:
+              api.write_text(s.replace(old, new, 1))
 
           app = Path('bm-mobile/App.js')
           js = app.read_text()
@@ -85,3 +87,5 @@ jobs:
           git add bm-api/app/Http/Controllers/Api/OwnerController.php bm-mobile/App.js .github/workflows/patch-owner-validation-messages.yml
           git commit -m "Improve owner apartment validation messages" || exit 0
           git push
+
+# trigger: 2
