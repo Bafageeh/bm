@@ -472,7 +472,7 @@ function OwnersScreen({ token, buildingId, owners, reload }) {
     <View style={styles.screenWrapper}>
       <ScrollView contentContainerStyle={[styles.screenContent, styles.ownersScreenContent]}>
         <View style={styles.screenCodeBadge}>
-          <Text style={styles.screenCodeText}>#S-OWNERS</Text>
+          <Text style={styles.screenCodeText}>#S-001</Text>
         </View>
         <SectionTitle icon="settings-outline" title="إدارة الملاك" />
         {(owners || []).length === 0 ? <EmptyState icon="people-outline" title="لا يوجد ملاك" text="اضغط زر الإضافة العائم لإضافة أول مالك لهذا المبنى." /> : null}
@@ -510,7 +510,7 @@ function OwnersScreen({ token, buildingId, owners, reload }) {
                 <Ionicons name="close" size={22} color="#0f172a" />
               </Pressable>
               <View style={styles.flex1}>
-                <Text style={styles.screenCodeText}>{editingOwner ? '#S-EDIT-OWNER' : '#S-ADD-OWNER'}</Text>
+                <Text style={styles.screenCodeText}>{editingOwner ? '#S-003' : '#S-002'}</Text>
                 <Text style={styles.floatingFormTitle}>{editingOwner ? 'تعديل بيانات المالك' : 'إضافة مالك'}</Text>
                 <Text style={styles.floatingFormSub}>{editingOwner ? `تعديل: ${editingOwner.name}` : 'أدخل بيانات المالك والشقق المرتبطة به'}</Text>
               </View>
