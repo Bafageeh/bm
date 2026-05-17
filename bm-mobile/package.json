@@ -4,13 +4,13 @@
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "prestart": "node scripts/add-screen-numbers.js",
+    "prestart": "node scripts/add-screen-numbers.js && node scripts/patch-building-cycle-settings.js",
     "start": "expo start --go",
-    "preandroid": "node scripts/add-screen-numbers.js",
+    "preandroid": "node scripts/add-screen-numbers.js && node scripts/patch-building-cycle-settings.js",
     "android": "expo start --android",
-    "preios": "node scripts/add-screen-numbers.js",
+    "preios": "node scripts/add-screen-numbers.js && node scripts/patch-building-cycle-settings.js",
     "ios": "expo start --ios",
-    "preweb": "node scripts/add-screen-numbers.js",
+    "preweb": "node scripts/add-screen-numbers.js && node scripts/patch-building-cycle-settings.js",
     "web": "expo start --web"
   },
   "dependencies": {
