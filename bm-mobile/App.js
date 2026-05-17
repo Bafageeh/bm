@@ -5,6 +5,7 @@ import {
   FlatList,
   I18nManager,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -386,11 +387,19 @@ function OwnersScreen({ token, buildingId, owners, reload }) {
   const [editingOwner, setEditingOwner] = useState(null);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [ownerFormVisible, setOwnerFormVisible] = useState(false);
 
   const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const resetForm = () => {
     setForm(emptyOwnerForm);
     setEditingOwner(null);
+    setOwnerFormVisible(false);
+  };
+
+  const openAddOwnerForm = () => {
+    setForm(emptyOwnerForm);
+    setEditingOwner(null);
+    setOwnerFormVisible(true);
   };
 
   const startEdit = (owner) => {
@@ -403,6 +412,7 @@ function OwnersScreen({ token, buildingId, owners, reload }) {
       apartmentsText: (owner.apartments || []).join('، '),
       notes: owner.notes || '',
     });
+    setOwnerFormVisible(true);
   };
 
   const payload = () => ({
@@ -459,47 +469,62 @@ function OwnersScreen({ token, buildingId, owners, reload }) {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.screenContent}>
-      <SectionTitle icon={editingOwner ? 'create-outline' : 'person-add-outline'} title={editingOwner ? 'تعديل بيانات المالك' : 'إضافة مالك'} />
-      <View style={styles.formCard}>
-        {editingOwner ? (
-          <View style={styles.editingBanner}>
-            <Ionicons name="create-outline" size={18} color="#0f766e" />
-            <Text style={styles.editingText}>تعديل: {editingOwner.name}</Text>
+    <View style={styles.screenWrapper}>
+      <ScrollView contentContainerStyle={[styles.screenContent, styles.ownersScreenContent]}>
+        <SectionTitle icon="settings-outline" title="إدارة الملاك" />
+        {(owners || []).length === 0 ? <EmptyState icon="people-outline" title="لا يوجد ملاك" text="اضغط زر الإضافة العائم لإضافة أول مالك لهذا المبنى." /> : null}
+        {(owners || []).map((owner) => (
+          <View key={owner.id} style={styles.manageOwnerCard}>
+            <OwnerCard owner={owner} />
+            <View style={styles.ownerMetaRow}>
+              <Text style={styles.ownerMeta}>الدخول: {owner.login || owner.national_id || owner.phone || '-'}</Text>
+              <Text style={styles.ownerMeta}>الجوال: {owner.phone || '-'}</Text>
+            </View>
+            <View style={styles.actionsRow}>
+              <Pressable style={styles.actionBtn} onPress={() => startEdit(owner)}>
+                <Ionicons name="create-outline" size={18} color="#0f766e" />
+                <Text style={styles.actionText}>تعديل</Text>
+              </Pressable>
+              <Pressable style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete(owner)} disabled={deletingId === owner.id}>
+                {deletingId === owner.id ? <ActivityIndicator size="small" color="#ef4444" /> : <Ionicons name="trash-outline" size={18} color="#ef4444" />}
+                <Text style={[styles.actionText, styles.deleteText]}>حذف</Text>
+              </Pressable>
+            </View>
           </View>
-        ) : null}
-        <Field label="اسم المالك" value={form.name} onChangeText={(value) => setField('name', value)} placeholder="اسم المالك" />
-        <Field label="رقم الجوال" value={form.phone} onChangeText={(value) => setField('phone', value)} placeholder="05xxxxxxxx" keyboardType="phone-pad" />
-        <Field label="رقم الهوية أو اسم الدخول" value={form.national_id} onChangeText={(value) => setField('national_id', value)} placeholder="اسم دخول المالك" />
-        <Field label="البريد الإلكتروني" value={form.email} onChangeText={(value) => setField('email', value)} placeholder="اختياري" keyboardType="email-address" />
-        <Field label="الشقق" value={form.apartmentsText} onChangeText={(value) => setField('apartmentsText', value)} placeholder="مثال: 1، 2، 3" />
-        <Field label="ملاحظة" value={form.notes} onChangeText={(value) => setField('notes', value)} placeholder="ملاحظة اختيارية" multiline />
-        <PrimaryButton title={editingOwner ? 'حفظ التعديل' : 'حفظ المالك'} icon="save-outline" onPress={save} loading={loading} />
-        {editingOwner ? <PrimaryButton title="إلغاء التعديل" icon="close-outline" onPress={resetForm} variant="light" /> : null}
-      </View>
+        ))}
+      </ScrollView>
 
-      <SectionTitle icon="settings-outline" title="إدارة الملاك" />
-      {(owners || []).length === 0 ? <EmptyState icon="people-outline" title="لا يوجد ملاك" text="أضف أول مالك لهذا المبنى." /> : null}
-      {(owners || []).map((owner) => (
-        <View key={owner.id} style={styles.manageOwnerCard}>
-          <OwnerCard owner={owner} />
-          <View style={styles.ownerMetaRow}>
-            <Text style={styles.ownerMeta}>الدخول: {owner.login || owner.national_id || owner.phone || '-'}</Text>
-            <Text style={styles.ownerMeta}>الجوال: {owner.phone || '-'}</Text>
+      <Pressable onPress={openAddOwnerForm} style={({ pressed }) => [styles.ownerFloatingAdd, pressed && styles.pressed]}>
+        <Ionicons name="person-add" size={24} color="#fff" />
+      </Pressable>
+
+      <Modal visible={ownerFormVisible} transparent animationType="fade" onRequestClose={resetForm}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
+          <Pressable style={styles.modalBackdrop} onPress={resetForm} />
+          <View style={styles.floatingFormCard}>
+            <View style={styles.floatingFormHeader}>
+              <Pressable onPress={resetForm} style={styles.closeFloatingBtn}>
+                <Ionicons name="close" size={22} color="#0f172a" />
+              </Pressable>
+              <View style={styles.flex1}>
+                <Text style={styles.floatingFormTitle}>{editingOwner ? 'تعديل بيانات المالك' : 'إضافة مالك'}</Text>
+                <Text style={styles.floatingFormSub}>{editingOwner ? `تعديل: ${editingOwner.name}` : 'أدخل بيانات المالك والشقق المرتبطة به'}</Text>
+              </View>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+              <Field label="اسم المالك" value={form.name} onChangeText={(value) => setField('name', value)} placeholder="اسم المالك" />
+              <Field label="رقم الجوال" value={form.phone} onChangeText={(value) => setField('phone', value)} placeholder="05xxxxxxxx" keyboardType="phone-pad" />
+              <Field label="رقم الهوية أو اسم الدخول" value={form.national_id} onChangeText={(value) => setField('national_id', value)} placeholder="اسم دخول المالك" />
+              <Field label="البريد الإلكتروني" value={form.email} onChangeText={(value) => setField('email', value)} placeholder="اختياري" keyboardType="email-address" />
+              <Field label="الشقق" value={form.apartmentsText} onChangeText={(value) => setField('apartmentsText', value)} placeholder="مثال: 1، 2، 3" />
+              <Field label="ملاحظة" value={form.notes} onChangeText={(value) => setField('notes', value)} placeholder="ملاحظة اختيارية" multiline />
+              <PrimaryButton title={editingOwner ? 'حفظ التعديل' : 'حفظ المالك'} icon="save-outline" onPress={save} loading={loading} />
+              <PrimaryButton title="إلغاء" icon="close-outline" onPress={resetForm} variant="light" />
+            </ScrollView>
           </View>
-          <View style={styles.actionsRow}>
-            <Pressable style={styles.actionBtn} onPress={() => startEdit(owner)}>
-              <Ionicons name="create-outline" size={18} color="#0f766e" />
-              <Text style={styles.actionText}>تعديل</Text>
-            </Pressable>
-            <Pressable style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete(owner)} disabled={deletingId === owner.id}>
-              {deletingId === owner.id ? <ActivityIndicator size="small" color="#ef4444" /> : <Ionicons name="trash-outline" size={18} color="#ef4444" />}
-              <Text style={[styles.actionText, styles.deleteText]}>حذف</Text>
-            </Pressable>
-          </View>
-        </View>
-      ))}
-    </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
 
@@ -662,6 +687,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
+  screenWrapper: { flex: 1, backgroundColor: '#f8fafc' },
   loginContainer: { flex: 1, backgroundColor: '#ecfdf5' },
   loginContent: { flex: 1, padding: 22, justifyContent: 'center' },
   logoCircle: { width: 98, height: 98, borderRadius: 49, backgroundColor: '#fff', alignSelf: 'center', justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
@@ -693,6 +719,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: '900', color: '#0f172a', fontSize: 15, textAlign: 'right' },
   cardSub: { color: '#64748b', fontSize: 12, marginTop: 3, textAlign: 'right' },
   screenContent: { padding: 16, paddingBottom: 110 },
+  ownersScreenContent: { paddingTop: 58 },
   heroCard: { backgroundColor: '#0f766e', borderRadius: 26, padding: 18, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, marginBottom: 14 },
   heroIcon: { width: 56, height: 56, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   heroTitle: { color: '#fff', fontWeight: '900', fontSize: 20, textAlign: 'right' },
@@ -738,7 +765,15 @@ const styles = StyleSheet.create({
   actionText: { color: '#0f766e', fontWeight: '900', fontSize: 13 },
   deleteText: { color: '#ef4444' },
   editingBanner: { backgroundColor: '#ecfdf5', borderRadius: 14, padding: 10, marginBottom: 12, flexDirection: 'row-reverse', alignItems: 'center', gap: 7 },
-  editingText: { color: '#0f766e', fontWeight: '900', textAlign: 'right' },
+  ownerFloatingAdd: { position: 'absolute', top: 10, left: 16, width: 54, height: 54, borderRadius: 27, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.18, shadowRadius: 14, elevation: 8, zIndex: 10 },
+  modalRoot: { flex: 1, justifyContent: 'flex-start', paddingTop: Platform.OS === 'ios' ? 70 : 44, paddingHorizontal: 14 },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.42)' },
+  floatingFormCard: { maxHeight: '86%', backgroundColor: '#fff', borderRadius: 26, padding: 14, shadowColor: '#0f172a', shadowOpacity: 0.18, shadowRadius: 18, elevation: 10 },
+  floatingFormHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingBottom: 12, marginBottom: 8 },
+  closeFloatingBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+  floatingFormTitle: { color: '#0f172a', fontWeight: '900', fontSize: 18, textAlign: 'right' },
+  floatingFormSub: { color: '#64748b', fontSize: 12, marginTop: 3, textAlign: 'right' },
+  floatingFormBody: { paddingTop: 4, paddingBottom: 8 },
   tabs: { position: 'absolute', left: 12, right: 12, bottom: Platform.OS === 'ios' ? 20 : 12, backgroundColor: '#fff', borderRadius: 24, padding: 8, flexDirection: 'row-reverse', justifyContent: 'space-around', shadowColor: '#0f172a', shadowOpacity: 0.1, shadowRadius: 18, elevation: 7 },
   tabBtn: { alignItems: 'center', justifyContent: 'center', gap: 3, minWidth: 66 },
   tabText: { fontSize: 11, color: '#94a3b8', fontWeight: '800' },
