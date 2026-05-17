@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -23,7 +23,6 @@ I18nManager.forceRTL(false);
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://bm.pm.sa/api';
 const money = (value) => `${Number(value || 0).toLocaleString('ar-SA', { maximumFractionDigits: 2 })} ريال`;
-
 const EXPENSE_CATEGORIES = ['حارس', 'كهرباء', 'مياه', 'نظافة', 'صيانة', 'مشتريات', 'مصعد', 'أخرى'];
 
 async function request(path, options = {}, token) {
@@ -38,7 +37,12 @@ async function request(path, options = {}, token) {
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (_) {
+    data = { message: text || 'حدث خطأ غير متوقع' };
+  }
 
   if (!response.ok) {
     const message = data?.message || Object.values(data?.errors || {})?.flat()?.[0] || 'حدث خطأ غير متوقع';
@@ -64,7 +68,7 @@ function IconCard({ icon, family = 'ion', title, value, tone = 'default' }) {
 function PrimaryButton({ title, icon, onPress, loading, variant = 'primary' }) {
   return (
     <Pressable disabled={loading} onPress={onPress} style={({ pressed }) => [styles.button, styles[`button_${variant}`], pressed && styles.pressed]}>
-      {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name={icon} size={20} color={variant === 'light' ? '#0f766e' : '#fff'} />}
+      {loading ? <ActivityIndicator color={variant === 'light' ? '#0f766e' : '#fff'} /> : <Ionicons name={icon} size={20} color={variant === 'light' ? '#0f766e' : '#fff'} />}
       <Text style={[styles.buttonText, variant === 'light' && styles.buttonTextLight]}>{title}</Text>
     </Pressable>
   );
@@ -97,10 +101,7 @@ function LoginScreen({ onLogin }) {
   const submit = async () => {
     try {
       setLoading(true);
-      const data = await request('/login', {
-        method: 'POST',
-        body: JSON.stringify({ login, password }),
-      });
+      const data = await request('/login', { method: 'POST', body: JSON.stringify({ login, password }) });
       await SecureStore.setItemAsync('bm_token', data.token);
       onLogin(data.token, data.user);
     } catch (error) {
@@ -137,32 +138,6 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-function BuildingPicker({ user, onSelect, onLogout }) {
-  return (
-    <SafeAreaView style={styles.container}>
-      <Header title="اختر المبنى" subtitle={`مرحبًا ${user?.name || ''}`} onLogout={onLogout} />
-      <FlatList
-        contentContainerStyle={styles.listContent}
-        data={user?.buildings || []}
-        keyExtractor={(item) => String(item.id)}
-        ListEmptyComponent={<EmptyState icon="business-outline" title="لا توجد مبانٍ" text="لم يتم ربط حسابك بأي مبنى بعد." />}
-        renderItem={({ item }) => (
-          <Pressable style={styles.buildingCard} onPress={() => onSelect(item)}>
-            <View style={styles.buildingIcon}>
-              <Ionicons name="business" size={28} color="#0f766e" />
-            </View>
-            <View style={styles.flex1}>
-              <Text style={styles.cardTitle}>{item.name}</Text>
-              <Text style={styles.cardSub}>{[item.city, item.district].filter(Boolean).join(' - ') || 'بدون موقع'}</Text>
-            </View>
-            <Ionicons name="chevron-back" size={22} color="#64748b" />
-          </Pressable>
-        )}
-      />
-    </SafeAreaView>
-  );
-}
-
 function Header({ title, subtitle, onLogout, onBack }) {
   return (
     <View style={styles.header}>
@@ -186,6 +161,30 @@ function Header({ title, subtitle, onLogout, onBack }) {
   );
 }
 
+function BuildingPicker({ user, onSelect, onLogout }) {
+  return (
+    <SafeAreaView style={styles.container}>
+      <Header title="اختر المبنى" subtitle={`مرحبًا ${user?.name || ''}`} onLogout={onLogout} />
+      <FlatList
+        contentContainerStyle={styles.listContent}
+        data={user?.buildings || []}
+        keyExtractor={(item) => String(item.id)}
+        ListEmptyComponent={<EmptyState icon="business-outline" title="لا توجد مبانٍ" text="لم يتم ربط حسابك بأي مبنى بعد." />}
+        renderItem={({ item }) => (
+          <Pressable style={styles.buildingCard} onPress={() => onSelect(item)}>
+            <View style={styles.buildingIcon}><Ionicons name="business" size={28} color="#0f766e" /></View>
+            <View style={styles.flex1}>
+              <Text style={styles.cardTitle}>{item.name}</Text>
+              <Text style={styles.cardSub}>{[item.city, item.district].filter(Boolean).join(' - ') || 'بدون موقع'}</Text>
+            </View>
+            <Ionicons name="chevron-back" size={22} color="#64748b" />
+          </Pressable>
+        )}
+      />
+    </SafeAreaView>
+  );
+}
+
 function EmptyState({ icon, title, text }) {
   return (
     <View style={styles.empty}>
@@ -201,9 +200,7 @@ function Dashboard({ dashboard }) {
   return (
     <ScrollView contentContainerStyle={styles.screenContent}>
       <View style={styles.heroCard}>
-        <View style={styles.heroIcon}>
-          <MaterialCommunityIcons name="home-city-outline" size={30} color="#fff" />
-        </View>
+        <View style={styles.heroIcon}><MaterialCommunityIcons name="home-city-outline" size={30} color="#fff" /></View>
         <View style={styles.flex1}>
           <Text style={styles.heroTitle}>{dashboard?.building?.name || 'المبنى'}</Text>
           <Text style={styles.heroSub}>كل مبنى مستقل ببياناته ومصروفاته وأرصدته</Text>
@@ -229,9 +226,7 @@ function OwnerCard({ owner }) {
   return (
     <View style={styles.ownerCard}>
       <View style={styles.ownerTop}>
-        <View style={styles.ownerAvatar}>
-          <Ionicons name="person" size={20} color="#0f766e" />
-        </View>
+        <View style={styles.ownerAvatar}><Ionicons name="person" size={20} color="#0f766e" /></View>
         <View style={styles.flex1}>
           <Text style={styles.cardTitle}>{owner.name}</Text>
           <Text style={styles.cardSub}>الشقق: {owner.apartments?.join('، ') || '-'}</Text>
@@ -384,51 +379,126 @@ function PaymentsScreen({ token, buildingId, owners, payments, reload }) {
   );
 }
 
-function OwnersScreen({ token, buildingId, owners, reload }) {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [nationalId, setNationalId] = useState('');
-  const [apartmentNumber, setApartmentNumber] = useState('');
-  const [loading, setLoading] = useState(false);
+const emptyOwnerForm = { name: '', phone: '', national_id: '', email: '', apartmentsText: '', notes: '' };
 
-  const add = async () => {
-    if (!name || !apartmentNumber) return Alert.alert('تنبيه', 'أدخل اسم المالك ورقم الشقة');
+function OwnersScreen({ token, buildingId, owners, reload }) {
+  const [form, setForm] = useState(emptyOwnerForm);
+  const [editingOwner, setEditingOwner] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+
+  const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const resetForm = () => {
+    setForm(emptyOwnerForm);
+    setEditingOwner(null);
+  };
+
+  const startEdit = (owner) => {
+    setEditingOwner(owner);
+    setForm({
+      name: owner.name || '',
+      phone: owner.phone || '',
+      national_id: owner.national_id || owner.login || '',
+      email: owner.email || '',
+      apartmentsText: (owner.apartments || []).join('، '),
+      notes: owner.notes || '',
+    });
+  };
+
+  const payload = () => ({
+    name: form.name.trim(),
+    phone: form.phone.trim(),
+    national_id: form.national_id.trim(),
+    email: form.email.trim(),
+    notes: form.notes.trim(),
+    apartments: form.apartmentsText
+      .split(/[،,\n]+/)
+      .map((number) => number.trim())
+      .filter(Boolean)
+      .map((number) => ({ number })),
+  });
+
+  const save = async () => {
+    const data = payload();
+    if (!data.name || data.apartments.length === 0) return Alert.alert('تنبيه', 'أدخل اسم المالك ورقم شقة واحد على الأقل');
+
     try {
       setLoading(true);
-      await request(`/buildings/${buildingId}/owners`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          phone,
-          national_id: nationalId,
-          apartments: [{ number: apartmentNumber }],
-        }),
+      await request(`/buildings/${buildingId}/owners${editingOwner ? `/${editingOwner.id}` : ''}`, {
+        method: editingOwner ? 'PUT' : 'POST',
+        body: JSON.stringify(data),
       }, token);
-      setName('');
-      setPhone('');
-      setNationalId('');
-      setApartmentNumber('');
+      resetForm();
       await reload();
+      Alert.alert('تم', editingOwner ? 'تم تعديل بيانات المالك' : 'تم إضافة المالك');
     } catch (error) {
-      Alert.alert('تعذر إضافة المالك', error.message);
+      Alert.alert(editingOwner ? 'تعذر تعديل المالك' : 'تعذر إضافة المالك', error.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const confirmDelete = (owner) => {
+    Alert.alert('حذف المالك', `هل تريد حذف ${owner.name} من هذا المبنى؟ سيتم فك ربط الشقق وحذف دفعاته.`, [
+      { text: 'إلغاء', style: 'cancel' },
+      { text: 'حذف', style: 'destructive', onPress: () => remove(owner) },
+    ]);
+  };
+
+  const remove = async (owner) => {
+    try {
+      setDeletingId(owner.id);
+      await request(`/buildings/${buildingId}/owners/${owner.id}`, { method: 'DELETE' }, token);
+      if (editingOwner?.id === owner.id) resetForm();
+      await reload();
+    } catch (error) {
+      Alert.alert('تعذر حذف المالك', error.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.screenContent}>
-      <SectionTitle icon="person-add-outline" title="إضافة مالك" />
+      <SectionTitle icon={editingOwner ? 'create-outline' : 'person-add-outline'} title={editingOwner ? 'تعديل بيانات المالك' : 'إضافة مالك'} />
       <View style={styles.formCard}>
-        <Field label="اسم المالك" value={name} onChangeText={setName} placeholder="اسم المالك" />
-        <Field label="رقم الجوال" value={phone} onChangeText={setPhone} placeholder="05xxxxxxxx" keyboardType="phone-pad" />
-        <Field label="رقم الهوية أو اسم الدخول" value={nationalId} onChangeText={setNationalId} placeholder="اختياري" />
-        <Field label="رقم الشقة" value={apartmentNumber} onChangeText={setApartmentNumber} placeholder="مثال: 12" />
-        <PrimaryButton title="حفظ المالك" icon="save-outline" onPress={add} loading={loading} />
+        {editingOwner ? (
+          <View style={styles.editingBanner}>
+            <Ionicons name="create-outline" size={18} color="#0f766e" />
+            <Text style={styles.editingText}>تعديل: {editingOwner.name}</Text>
+          </View>
+        ) : null}
+        <Field label="اسم المالك" value={form.name} onChangeText={(value) => setField('name', value)} placeholder="اسم المالك" />
+        <Field label="رقم الجوال" value={form.phone} onChangeText={(value) => setField('phone', value)} placeholder="05xxxxxxxx" keyboardType="phone-pad" />
+        <Field label="رقم الهوية أو اسم الدخول" value={form.national_id} onChangeText={(value) => setField('national_id', value)} placeholder="اسم دخول المالك" />
+        <Field label="البريد الإلكتروني" value={form.email} onChangeText={(value) => setField('email', value)} placeholder="اختياري" keyboardType="email-address" />
+        <Field label="الشقق" value={form.apartmentsText} onChangeText={(value) => setField('apartmentsText', value)} placeholder="مثال: 1، 2، 3" />
+        <Field label="ملاحظة" value={form.notes} onChangeText={(value) => setField('notes', value)} placeholder="ملاحظة اختيارية" multiline />
+        <PrimaryButton title={editingOwner ? 'حفظ التعديل' : 'حفظ المالك'} icon="save-outline" onPress={save} loading={loading} />
+        {editingOwner ? <PrimaryButton title="إلغاء التعديل" icon="close-outline" onPress={resetForm} variant="light" /> : null}
       </View>
 
-      <SectionTitle icon="people-outline" title="الملاك" />
-      {(owners || []).map((owner) => <OwnerCard key={owner.id} owner={owner} />)}
+      <SectionTitle icon="settings-outline" title="إدارة الملاك" />
+      {(owners || []).length === 0 ? <EmptyState icon="people-outline" title="لا يوجد ملاك" text="أضف أول مالك لهذا المبنى." /> : null}
+      {(owners || []).map((owner) => (
+        <View key={owner.id} style={styles.manageOwnerCard}>
+          <OwnerCard owner={owner} />
+          <View style={styles.ownerMetaRow}>
+            <Text style={styles.ownerMeta}>الدخول: {owner.login || owner.national_id || owner.phone || '-'}</Text>
+            <Text style={styles.ownerMeta}>الجوال: {owner.phone || '-'}</Text>
+          </View>
+          <View style={styles.actionsRow}>
+            <Pressable style={styles.actionBtn} onPress={() => startEdit(owner)}>
+              <Ionicons name="create-outline" size={18} color="#0f766e" />
+              <Text style={styles.actionText}>تعديل</Text>
+            </Pressable>
+            <Pressable style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete(owner)} disabled={deletingId === owner.id}>
+              {deletingId === owner.id ? <ActivityIndicator size="small" color="#ef4444" /> : <Ionicons name="trash-outline" size={18} color="#ef4444" />}
+              <Text style={[styles.actionText, styles.deleteText]}>حذف</Text>
+            </Pressable>
+          </View>
+        </View>
+      ))}
     </ScrollView>
   );
 }
@@ -442,7 +512,6 @@ function OwnerOnlyScreen({ token }) {
   }, [token]);
 
   if (loading) return <LoadingScreen />;
-
   const profile = data?.owners?.[0];
   if (!profile) return <EmptyState icon="home-outline" title="لا توجد بيانات" text="لم يتم ربط حسابك بمالك بعد." />;
 
@@ -499,9 +568,7 @@ function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout
     }
   };
 
-  useEffect(() => {
-    reload();
-  }, [selectedBuilding?.id]);
+  useEffect(() => { reload(); }, [selectedBuilding?.id]);
 
   if (user?.role === 'owner') {
     return (
@@ -574,9 +641,7 @@ export default function App() {
     setSelectedBuilding(null);
   };
 
-  if (booting) {
-    return <SafeAreaProvider><LoadingScreen /></SafeAreaProvider>;
-  }
+  if (booting) return <SafeAreaProvider><LoadingScreen /></SafeAreaProvider>;
 
   return (
     <SafeAreaProvider>
@@ -610,7 +675,7 @@ const styles = StyleSheet.create({
   label: { color: '#334155', fontSize: 13, fontWeight: '800', textAlign: 'right', marginBottom: 6 },
   input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0f172a' },
   textarea: { minHeight: 82, textAlignVertical: 'top' },
-  button: { height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 8, marginTop: 4 },
+  button: { height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 8, marginTop: 8 },
   button_primary: { backgroundColor: '#0f766e' },
   button_light: { backgroundColor: '#ecfdf5' },
   buttonText: { color: '#fff', fontWeight: '900', fontSize: 15 },
@@ -643,7 +708,7 @@ const styles = StyleSheet.create({
   statValue: { color: '#0f172a', fontSize: 16, fontWeight: '900', marginTop: 6, textAlign: 'right' },
   sectionTitle: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7, marginTop: 18, marginBottom: 10 },
   sectionText: { fontSize: 17, fontWeight: '900', color: '#0f172a' },
-  ownerCard: { backgroundColor: '#fff', borderRadius: 22, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  ownerCard: { backgroundColor: '#fff', borderRadius: 22, padding: 14, borderWidth: 1, borderColor: '#e2e8f0' },
   ownerTop: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
   ownerAvatar: { width: 42, height: 42, borderRadius: 16, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center' },
   badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
@@ -664,6 +729,16 @@ const styles = StyleSheet.create({
   rowCard: { backgroundColor: '#fff', borderRadius: 18, padding: 13, marginBottom: 9, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#e2e8f0' },
   rowIcon: { width: 40, height: 40, borderRadius: 15, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
   amountText: { color: '#0f172a', fontWeight: '900' },
+  manageOwnerCard: { marginBottom: 12, backgroundColor: '#fff', borderRadius: 24, padding: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  ownerMetaRow: { flexDirection: 'row-reverse', gap: 8, flexWrap: 'wrap', paddingHorizontal: 4, paddingTop: 8 },
+  ownerMeta: { fontSize: 11, color: '#64748b', textAlign: 'right' },
+  actionsRow: { flexDirection: 'row-reverse', gap: 8, marginTop: 10 },
+  actionBtn: { flex: 1, height: 42, borderRadius: 14, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 6 },
+  deleteBtn: { backgroundColor: '#fef2f2' },
+  actionText: { color: '#0f766e', fontWeight: '900', fontSize: 13 },
+  deleteText: { color: '#ef4444' },
+  editingBanner: { backgroundColor: '#ecfdf5', borderRadius: 14, padding: 10, marginBottom: 12, flexDirection: 'row-reverse', alignItems: 'center', gap: 7 },
+  editingText: { color: '#0f766e', fontWeight: '900', textAlign: 'right' },
   tabs: { position: 'absolute', left: 12, right: 12, bottom: Platform.OS === 'ios' ? 20 : 12, backgroundColor: '#fff', borderRadius: 24, padding: 8, flexDirection: 'row-reverse', justifyContent: 'space-around', shadowColor: '#0f172a', shadowOpacity: 0.1, shadowRadius: 18, elevation: 7 },
   tabBtn: { alignItems: 'center', justifyContent: 'center', gap: 3, minWidth: 66 },
   tabText: { fontSize: 11, color: '#94a3b8', fontWeight: '800' },
