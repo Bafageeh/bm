@@ -21,7 +21,7 @@ class Building extends Model
     protected function casts(): array
     {
         return [
-            'annual_cycle_starts_on' => 'date',
+            'annual_cycle_starts_on' => 'date:Y-m-d',
         ];
     }
 
