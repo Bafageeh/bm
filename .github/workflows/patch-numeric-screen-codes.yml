@@ -1,0 +1,43 @@
+name: Patch numeric screen codes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-numeric-screen-codes.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Convert screen codes to numbers only
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('bm-mobile/App.js')
+          text = path.read_text()
+          replacements = {
+              '#S-OWNERS': '#S-001',
+              '#S-ADD-OWNER': '#S-002',
+              '#S-EDIT-OWNER': '#S-003',
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+          path.write_text(text)
+          PY
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bm-mobile/App.js
+          git commit -m "Use numeric screen codes"
+          git push
