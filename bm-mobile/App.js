@@ -471,6 +471,9 @@ function OwnersScreen({ token, buildingId, owners, reload }) {
   return (
     <View style={styles.screenWrapper}>
       <ScrollView contentContainerStyle={[styles.screenContent, styles.ownersScreenContent]}>
+        <View style={styles.screenCodeBadge}>
+          <Text style={styles.screenCodeText}>#S-OWNERS</Text>
+        </View>
         <SectionTitle icon="settings-outline" title="إدارة الملاك" />
         {(owners || []).length === 0 ? <EmptyState icon="people-outline" title="لا يوجد ملاك" text="اضغط زر الإضافة العائم لإضافة أول مالك لهذا المبنى." /> : null}
         {(owners || []).map((owner) => (
@@ -507,6 +510,7 @@ function OwnersScreen({ token, buildingId, owners, reload }) {
                 <Ionicons name="close" size={22} color="#0f172a" />
               </Pressable>
               <View style={styles.flex1}>
+                <Text style={styles.screenCodeText}>{editingOwner ? '#S-EDIT-OWNER' : '#S-ADD-OWNER'}</Text>
                 <Text style={styles.floatingFormTitle}>{editingOwner ? 'تعديل بيانات المالك' : 'إضافة مالك'}</Text>
                 <Text style={styles.floatingFormSub}>{editingOwner ? `تعديل: ${editingOwner.name}` : 'أدخل بيانات المالك والشقق المرتبطة به'}</Text>
               </View>
@@ -735,6 +739,8 @@ const styles = StyleSheet.create({
   statValue: { color: '#0f172a', fontSize: 16, fontWeight: '900', marginTop: 6, textAlign: 'right' },
   sectionTitle: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7, marginTop: 18, marginBottom: 10 },
   sectionText: { fontSize: 17, fontWeight: '900', color: '#0f172a' },
+  screenCodeBadge: { alignSelf: 'flex-start', backgroundColor: '#e0f2fe', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 2 },
+  screenCodeText: { color: '#0369a1', fontWeight: '900', fontSize: 11, textAlign: 'right' },
   ownerCard: { backgroundColor: '#fff', borderRadius: 22, padding: 14, borderWidth: 1, borderColor: '#e2e8f0' },
   ownerTop: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
   ownerAvatar: { width: 42, height: 42, borderRadius: 16, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center' },
