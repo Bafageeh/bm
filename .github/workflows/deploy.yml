@@ -25,7 +25,8 @@ jobs:
             cd bm-mobile
             node scripts/add-screen-numbers.js || true
             node scripts/group-expenses-screen.js || true
-            pkill -f "8084|expo|metro" || true
+            (pkill -f "8084|expo|metro" || true) >/dev/null 2>&1
+
             BROWSER=none EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=bm.pm.sa \
             XDG_CACHE_HOME=/home/pmsa/apps/.cache \
             TMPDIR=/home/pmsa/apps/.tmp \
@@ -33,3 +34,5 @@ jobs:
             TEMP=/home/pmsa/apps/.tmp \
             nohup npx expo start --clear --go --host lan --port 8084 \
             > /home/pmsa/apps/bm-expo-8084.log 2>&1 &
+
+            exit 0
