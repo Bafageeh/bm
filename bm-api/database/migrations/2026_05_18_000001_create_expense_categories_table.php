@@ -12,6 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('building_id')->constrained()->cascadeOnDelete();
             $table->string('name', 100);
+            $table->unsignedInteger('sort_order')->default(0);
             $table->timestamps();
             $table->unique(['building_id', 'name']);
         });
