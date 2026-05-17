@@ -25,6 +25,8 @@ jobs:
             cd bm-mobile
             node scripts/add-screen-numbers.js || true
             node scripts/group-expenses-screen.js || true
+            node scripts/ready-dates.js || true
+            node scripts/s004-floating-expense.js || true
 
             lsof -ti:8084 | xargs -r kill -9 || true
 
