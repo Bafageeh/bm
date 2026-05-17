@@ -21,7 +21,7 @@ class OwnerPayment extends Model
     {
         return [
             'amount' => 'decimal:2',
-            'payment_date' => 'date',
+            'payment_date' => 'date:Y-m-d',
         ];
     }
 
