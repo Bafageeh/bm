@@ -1,0 +1,41 @@
+name: Patch owner apartment required
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-owner-apartment-required.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Make apartment field visibly required
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('bm-mobile/App.js')
+          s = p.read_text()
+          old = '<Field label="الشقق" value={form.apartmentsText} onChangeText={(v) => setField(\'apartmentsText\', v)} placeholder="مثال: 1، 2، 3" />'
+          new = '<Field label="رقم الشقة *" value={form.apartmentsText} onChangeText={(v) => setField(\'apartmentsText\', v)} placeholder="مطلوب - مثال: 1، 2، 3" />'
+          if old not in s:
+              raise SystemExit('Target owner apartment field was not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Remove temporary workflow
+        run: rm -f .github/workflows/patch-owner-apartment-required.yml
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bm-mobile/App.js .github/workflows/patch-owner-apartment-required.yml
+          git commit -m "Make owner apartment number required" || exit 0
+          git push
