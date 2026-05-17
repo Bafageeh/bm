@@ -41,11 +41,13 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$BM_SSH_PRIVATE_KEY" > ~/.ssh/bm_deploy_key
           chmod 600 ~/.ssh/bm_deploy_key
+
+          : > ~/.ssh/known_hosts
           if [ -n "${BM_SSH_KNOWN_HOSTS:-}" ]; then
-            printf '%s\n' "$BM_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          else
-            ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" > ~/.ssh/known_hosts
+            printf '%s\n' "$BM_SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
           fi
+          ssh-keyscan -T 20 -p "$SSH_PORT" -t rsa,ecdsa,ed25519 "$SSH_HOST" >> ~/.ssh/known_hosts
+          sort -u ~/.ssh/known_hosts -o ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
       - name: Deploy on server
