@@ -65,6 +65,14 @@ const replacements = [
     `actionBtn: { flex: 1, height: 42, borderRadius: 14, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 6 }`,
     `actionBtn: { flex: 1, height: 38, borderRadius: 12, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 6 }`,
   ],
+  [
+    `<ScreenCode code="#S-004" /><SectionTitle icon="receipt-outline" title="إجمالي المصروفات حسب التصنيف" />{groupedExpenses.length === 0 ?`,
+    `<ScreenCode code="#S-004" />{groupedExpenses.length === 0 ?`,
+  ],
+  [
+    `<Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} />`,
+    `<Header title={tab === 'owners' ? 'إدارة الملاك' : tab === 'expenses' ? 'المصروفات' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} />`,
+  ],
 ];
 
 for (const [from, to] of replacements) {
@@ -72,4 +80,4 @@ for (const [from, to] of replacements) {
 }
 
 fs.writeFileSync(appPath, content);
-console.log(`Compact card spacing applied without reducing fonts: ${applied} replacement(s)`);
+console.log(`BM mobile post-deploy UI patches applied: ${applied} replacement(s)`);
