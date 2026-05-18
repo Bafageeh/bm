@@ -47,6 +47,33 @@ class AuthController extends BaseApiController
         ];
     }
 
+    public function changePassword(Request $request)
+    {
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ], [
+            'current_password.required' => 'أدخل الرقم السري الحالي.',
+            'password.required' => 'أدخل الرقم السري الجديد.',
+            'password.min' => 'الرقم السري الجديد يجب ألا يقل عن 6 أحرف.',
+            'password.confirmed' => 'تأكيد الرقم السري غير مطابق.',
+        ]);
+
+        $user = $request->user();
+
+        if (! Hash::check($data['current_password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['الرقم السري الحالي غير صحيح.'],
+            ]);
+        }
+
+        $user->forceFill([
+            'password' => Hash::make($data['password']),
+        ])->save();
+
+        return ['message' => 'تم تعديل الرقم السري بنجاح.'];
+    }
+
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()?->delete();
