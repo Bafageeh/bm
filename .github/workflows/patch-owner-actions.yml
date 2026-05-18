@@ -1,10 +1,11 @@
-name: Patch owner actions menu
+name: Patch owner actions and compact cards
 
 on:
   push:
     branches: [main]
     paths:
       - 'bm-mobile/scripts/owner-actions-menu.js'
+      - 'bm-mobile/scripts/compact-owner-cards.js'
       - '.github/workflows/patch-owner-actions.yml'
   workflow_dispatch:
 
@@ -21,6 +22,8 @@ jobs:
           node-version: '20'
       - name: Apply owner actions menu patch
         run: node bm-mobile/scripts/owner-actions-menu.js
+      - name: Apply compact owner cards patch
+        run: node bm-mobile/scripts/compact-owner-cards.js
       - name: Commit App.js changes
         run: |
           if git diff --quiet bm-mobile/App.js; then
@@ -30,5 +33,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bm-mobile/App.js
-          git commit -m "Apply owner card actions menu to App.js"
+          git commit -m "Apply screen 001 owner card UI changes to App.js"
           git push
