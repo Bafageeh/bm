@@ -47,7 +47,7 @@ class ManagerRegistrationController extends BaseApiController
 
         return [
             'registration_id' => $registrationId,
-            'message' => $sent ? 'تم إرسال رمز التحقق على الواتساب.' : 'تم إنشاء رمز التحقق لكن مزود الواتساب غير مضبوط بعد.',
+            'message' => $sent ? 'تم إرسال رمز التحقق على الواتساب.' : 'تم إنشاء رمز التحقق لكن إعدادات الواتساب غير مكتملة أو فشل الإرسال.',
             'whatsapp_sent' => $sent,
             'expires_in_seconds' => 600,
         ];
@@ -140,33 +140,71 @@ class ManagerRegistrationController extends BaseApiController
 
     private function sendOtp(string $phone, string $otp): bool
     {
-        $url = env('WHATSAPP_URL');
-        if (! $url) {
-            Log::warning('WhatsApp URL is not configured for manager registration OTP.', ['phone' => $phone]);
+        $apiKey = env('WHATSAPP_API_KEY') ?: env('WHATSAPP_TOKEN');
+        $phoneNumberId = env('WHATSAPP_PHONE_NUMBER_ID');
+        $apiVersion = env('WHATSAPP_API_VERSION', 'v25.0');
+        $timeout = (int) env('WHATSAPP_HTTP_TIMEOUT', 15);
+
+        if (! $apiKey || ! $phoneNumberId) {
+            Log::warning('WhatsApp Cloud settings are incomplete for manager registration OTP.', [
+                'has_api_key' => (bool) $apiKey,
+                'has_phone_number_id' => (bool) $phoneNumberId,
+            ]);
             return false;
         }
 
-        try {
-            $headers = [];
-            if ($token = (env('WHATSAPP_TOKEN') ?: env('WHATSAPP_API_KEY'))) {
-                $headers['Authorization'] = 'Bearer '.$token;
-            }
+        $to = $this->normalizeWhatsAppPhone($phone);
+        $url = 'https://graph.facebook.com/'.$apiVersion.'/'.$phoneNumberId.'/messages';
+        $message = 'رمز التحقق لتسجيل مدير اتحاد الملاك هو: '.$otp;
 
-            $response = Http::timeout((int) env('WHATSAPP_HTTP_TIMEOUT', 15))->withHeaders($headers)->post($url, [
-                'phone' => $phone,
-                'to' => $phone,
-                'message' => 'رمز التحقق لتسجيل مدير اتحاد الملاك هو: '.$otp,
-                'body' => 'رمز التحقق لتسجيل مدير اتحاد الملاك هو: '.$otp,
+        try {
+            $response = Http::timeout($timeout)->withToken($apiKey)->post($url, [
+                'messaging_product' => 'whatsapp',
+                'recipient_type' => 'individual',
+                'to' => $to,
+                'type' => 'text',
+                'text' => [
+                    'preview_url' => false,
+                    'body' => $message,
+                ],
             ]);
+
+            if (! $response->successful()) {
+                Log::warning('WhatsApp OTP sending failed.', [
+                    'phone' => $to,
+                    'status' => $response->status(),
+                    'response' => $response->json() ?: $response->body(),
+                ]);
+            }
 
             return $response->successful();
         } catch (\Throwable $e) {
-            Log::warning('WhatsApp sending failed', [
-                'phone' => $phone,
+            Log::warning('WhatsApp OTP sending exception.', [
+                'phone' => $to,
                 'error' => $e->getMessage(),
             ]);
 
             return false;
         }
+    }
+
+    private function normalizeWhatsAppPhone(string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', $phone) ?: '';
+        $countryCode = preg_replace('/\D+/', '', (string) env('WHATSAPP_DEFAULT_COUNTRY_CODE', '966')) ?: '966';
+
+        if (str_starts_with($digits, '00')) {
+            $digits = substr($digits, 2);
+        }
+
+        if (str_starts_with($digits, '0')) {
+            return $countryCode.substr($digits, 1);
+        }
+
+        if (! str_starts_with($digits, $countryCode) && strlen($digits) <= 9) {
+            return $countryCode.$digits;
+        }
+
+        return $digits;
     }
 }
