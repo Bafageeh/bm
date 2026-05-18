@@ -34,6 +34,8 @@ class AuthController extends BaseApiController
             ]);
         }
 
+        $this->updateLegacyUsername($user);
+
         return [
             'token' => $user->createToken('bm-mobile')->plainTextToken,
             'user' => $this->userPayload($user),
@@ -42,8 +44,11 @@ class AuthController extends BaseApiController
 
     public function me(Request $request)
     {
+        $user = $request->user();
+        $this->updateLegacyUsername($user);
+
         return [
-            'user' => $this->userPayload($request->user()),
+            'user' => $this->userPayload($user),
         ];
     }
 
@@ -79,6 +84,25 @@ class AuthController extends BaseApiController
         $request->user()->currentAccessToken()?->delete();
 
         return ['message' => 'تم تسجيل الخروج بنجاح.'];
+    }
+
+    private function updateLegacyUsername(User $user): void
+    {
+        if ($user->username !== '10000000') {
+            return;
+        }
+
+        $exists = User::query()
+            ->where('username', '1234')
+            ->where('id', '!=', $user->id)
+            ->exists();
+
+        if ($exists) {
+            return;
+        }
+
+        $user->forceFill(['username' => '1234'])->save();
+        $user->refresh();
     }
 
     private function userPayload(User $user): array
