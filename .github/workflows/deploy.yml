@@ -24,6 +24,7 @@ jobs:
             git reset --hard origin/main
             cd bm-mobile
             node scripts/add-screen-numbers.js || true
+            node scripts/manager-registration-ui.js || true
 
             lsof -ti:8084 | xargs -r kill -9 || true
 
