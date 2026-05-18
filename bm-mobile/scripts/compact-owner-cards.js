@@ -15,6 +15,8 @@ r("ownerTop: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }", "
 r("ownerAvatar: { width: 42, height: 42, borderRadius: 16, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center' }", "ownerAvatar: { width: 32, height: 32, borderRadius: 12, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center' }");
 r("badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 }", "badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 }");
 r("badgeText: { color: '#0f172a', fontWeight: '800', fontSize: 11 }", "badgeText: { color: '#0f172a', fontWeight: '800', fontSize: 10 }");
+r("badgeSurplus: { backgroundColor: '#dcfce7' }", "badgeSurplus: { backgroundColor: '#dcfce7', transform: [{ translateX: 50 }] }");
+r("badgeSurplus: { backgroundColor: '#dcfce7', transform: [{ translateX: 50 }] }", "badgeSurplus: { backgroundColor: '#dcfce7', transform: [{ translateX: 50 }] }");
 r("ownerAmounts: { flexDirection: 'row-reverse', gap: 8, marginTop: 12, flexWrap: 'wrap' }", "ownerAmounts: { flexDirection: 'row-reverse', gap: 6, marginTop: 7, flexWrap: 'wrap' }");
 r("smallAmount: { flexGrow: 1, minWidth: '45%', backgroundColor: '#f8fafc', borderRadius: 16, padding: 10 }", "smallAmount: { flexGrow: 1, minWidth: '45%', backgroundColor: '#f8fafc', borderRadius: 12, padding: 6 }");
 r("smallTitle: { fontSize: 11, color: '#64748b', textAlign: 'right' }", "smallTitle: { fontSize: 10, color: '#64748b', textAlign: 'right' }");
@@ -27,4 +29,4 @@ r("actionBtn: { flex: 1, height: 42, borderRadius: 14, backgroundColor: '#ecfdf5
 r("actionText: { color: '#0f766e', fontWeight: '900', fontSize: 13 }", "actionText: { color: '#0f766e', fontWeight: '900', fontSize: 12 }");
 r("ownerFloatingAdd: { position: 'absolute', top: 10, left: 16, width: 54, height: 54, borderRadius: 27, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.18, shadowRadius: 14, elevation: 8, zIndex: 10 }", "ownerFloatingAdd: { position: 'absolute', top: 8, left: 16, width: 46, height: 46, borderRadius: 23, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.18, shadowRadius: 11, elevation: 8, zIndex: 10 }");
 if (changed) fs.writeFileSync(file, s);
-console.log(changed ? 'compact cards applied' : 'no changes');
+console.log(changed ? 'compact cards and surplus badge position applied' : 'no changes');
