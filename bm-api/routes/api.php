@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\BuildingController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExpenseCategoryController;
 use App\Http\Controllers\Api\ExpenseController;
+use App\Http\Controllers\Api\ManagerRegistrationController;
 use App\Http\Controllers\Api\OwnerController;
 use App\Http\Controllers\Api\PaymentController;
 use Illuminate\Support\Facades\Route;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/health', fn () => ['ok' => true, 'app' => 'BM API']);
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/manager-registration/request-otp', [ManagerRegistrationController::class, 'requestOtp']);
+Route::post('/manager-registration/verify', [ManagerRegistrationController::class, 'verify']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
