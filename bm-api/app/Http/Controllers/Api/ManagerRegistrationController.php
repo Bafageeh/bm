@@ -47,8 +47,8 @@ class ManagerRegistrationController extends BaseApiController
 
         return [
             'registration_id' => $registrationId,
-            'message' => $sent ? 'تم إرسال رمز التحقق على رقم الجوال.' : 'تم إنشاء رمز التحقق لكن مزود الرسائل غير مضبوط بعد.',
-            'sms_sent' => $sent,
+            'message' => $sent ? 'تم إرسال رمز التحقق على الواتساب.' : 'تم إنشاء رمز التحقق لكن مزود الواتساب غير مضبوط بعد.',
+            'whatsapp_sent' => $sent,
             'expires_in_seconds' => 600,
         ];
     }
@@ -140,21 +140,28 @@ class ManagerRegistrationController extends BaseApiController
 
     private function sendOtp(string $phone, string $otp): bool
     {
-        $url = env('BM_SMS_URL');
+        $url = env('BM_WHATSAPP_URL');
         if (! $url) {
-            Log::warning('BM SMS URL is not configured for manager registration OTP.', ['phone' => $phone]);
+            Log::warning('BM WhatsApp URL is not configured for manager registration OTP.', ['phone' => $phone]);
             return false;
         }
 
         try {
-            $response = Http::timeout(10)->post($url, [
+            $headers = [];
+            if ($token = env('BM_WHATSAPP_TOKEN')) {
+                $headers['Authorization'] = 'Bearer '.$token;
+            }
+
+            $response = Http::timeout(10)->withHeaders($headers)->post($url, [
                 'phone' => $phone,
+                'to' => $phone,
                 'message' => 'رمز التحقق لتسجيل مدير اتحاد الملاك هو: '.$otp,
+                'body' => 'رمز التحقق لتسجيل مدير اتحاد الملاك هو: '.$otp,
             ]);
 
             return $response->successful();
         } catch (\Throwable $e) {
-            Log::warning('BM OTP SMS sending failed', [
+            Log::warning('BM OTP WhatsApp sending failed', [
                 'phone' => $phone,
                 'error' => $e->getMessage(),
             ]);
