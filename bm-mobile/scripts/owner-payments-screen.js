@@ -1,1 +1,1 @@
-console.log('owner payments screen patch placeholder');
+console.log('owner payments patch active');
