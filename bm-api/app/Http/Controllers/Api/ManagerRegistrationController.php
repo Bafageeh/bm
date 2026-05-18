@@ -148,7 +148,7 @@ class ManagerRegistrationController extends BaseApiController
 
         try {
             $headers = [];
-            if ($token = env('WHATSAPP_TOKEN')) {
+            if ($token = (env('WHATSAPP_TOKEN') ?: env('WHATSAPP_API_KEY'))) {
                 $headers['Authorization'] = 'Bearer '.$token;
             }
 
