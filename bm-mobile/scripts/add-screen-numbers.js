@@ -12,6 +12,13 @@ function replaceFragment(from, to) {
   }
 }
 
+function replaceRegex(pattern, to) {
+  if (pattern.test(content)) {
+    content = content.replace(pattern, to);
+    applied += 1;
+  }
+}
+
 const replacements = [
   [
     `screenContent: { padding: 16, paddingBottom: 110 }`,
@@ -73,11 +80,24 @@ const replacements = [
     `<Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} />`,
     `<Header title={tab === 'owners' ? 'إدارة الملاك' : tab === 'expenses' ? 'المصروفات' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} />`,
   ],
+  [
+    `<Header title="حسابي" subtitle={user.name} onLogout={onLogout} />`,
+    `<Header title="المصروفات" subtitle={user.name} onLogout={onLogout} />`,
+  ],
+  [
+    `<ScreenCode code="#S-009" /><Dashboard dashboard={{ building: profile.building, stats: {}, owners: [profile.summary] }} /><SectionTitle icon="receipt-outline" title="تفصيل نصيبك من المصروفات" />`,
+    `<ScreenCode code="#S-012" /><Dashboard dashboard={{ building: profile.building, stats: {}, owners: [profile.summary] }} />`,
+  ],
 ];
 
 for (const [from, to] of replacements) {
   replaceFragment(from, to);
 }
+
+// Extra resilient patches for the owner-account expenses screen if the file was reformatted.
+replaceRegex(/<Header title="حسابي" subtitle=\{user\.name\} onLogout=\{onLogout\} \/>/g, `<Header title="المصروفات" subtitle={user.name} onLogout={onLogout} />`);
+replaceRegex(/<ScreenCode code="#S-009" \/>/g, `<ScreenCode code="#S-012" />`);
+replaceRegex(/<SectionTitle icon="receipt-outline" title="تفصيل نصيبك من المصروفات" \/>/g, ``);
 
 fs.writeFileSync(appPath, content);
 console.log(`BM mobile post-deploy UI patches applied: ${applied} replacement(s)`);
