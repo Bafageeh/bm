@@ -140,19 +140,19 @@ class ManagerRegistrationController extends BaseApiController
 
     private function sendOtp(string $phone, string $otp): bool
     {
-        $url = env('BM_WHATSAPP_URL');
+        $url = env('WHATSAPP_URL');
         if (! $url) {
-            Log::warning('BM WhatsApp URL is not configured for manager registration OTP.', ['phone' => $phone]);
+            Log::warning('WhatsApp URL is not configured for manager registration OTP.', ['phone' => $phone]);
             return false;
         }
 
         try {
             $headers = [];
-            if ($token = env('BM_WHATSAPP_TOKEN')) {
+            if ($token = env('WHATSAPP_TOKEN')) {
                 $headers['Authorization'] = 'Bearer '.$token;
             }
 
-            $response = Http::timeout(10)->withHeaders($headers)->post($url, [
+            $response = Http::timeout((int) env('WHATSAPP_HTTP_TIMEOUT', 15))->withHeaders($headers)->post($url, [
                 'phone' => $phone,
                 'to' => $phone,
                 'message' => 'رمز التحقق لتسجيل مدير اتحاد الملاك هو: '.$otp,
@@ -161,7 +161,7 @@ class ManagerRegistrationController extends BaseApiController
 
             return $response->successful();
         } catch (\Throwable $e) {
-            Log::warning('BM OTP WhatsApp sending failed', [
+            Log::warning('WhatsApp sending failed', [
                 'phone' => $phone,
                 'error' => $e->getMessage(),
             ]);
