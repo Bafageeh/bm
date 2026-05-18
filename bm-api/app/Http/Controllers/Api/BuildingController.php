@@ -71,6 +71,7 @@ class BuildingController extends BaseApiController
         $this->assertManagerOrAdmin($request, $building);
 
         $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:255'],
             'apartment_count' => ['required', 'integer', 'min:0', 'max:1000'],
             'annual_cycle_starts_on' => ['nullable', 'date'],
         ]);
@@ -96,6 +97,10 @@ class BuildingController extends BaseApiController
         }
 
         $updateData = [];
+
+        if (array_key_exists('name', $data) && trim((string) $data['name']) !== '') {
+            $updateData['name'] = trim((string) $data['name']);
+        }
 
         if (Schema::hasColumn('buildings', 'apartment_count')) {
             $updateData['apartment_count'] = $targetCount;
