@@ -1,0 +1,1 @@
+screen 001 owner cards should be smaller: less padding, smaller avatar, smaller amount boxes.
