@@ -1,4 +1,4 @@
-name: Patch owner actions and compact cards
+name: Patch owner actions compact cards and header
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - 'bm-mobile/scripts/owner-actions-menu.js'
       - 'bm-mobile/scripts/compact-owner-cards.js'
+      - 'bm-mobile/scripts/header-owners-title.js'
       - '.github/workflows/patch-owner-actions.yml'
   workflow_dispatch:
 
@@ -24,6 +25,8 @@ jobs:
         run: node bm-mobile/scripts/owner-actions-menu.js
       - name: Apply compact owner cards patch
         run: node bm-mobile/scripts/compact-owner-cards.js
+      - name: Apply screen 001 header title patch
+        run: node bm-mobile/scripts/header-owners-title.js
       - name: Commit App.js changes
         run: |
           if git diff --quiet bm-mobile/App.js; then
@@ -33,5 +36,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bm-mobile/App.js
-          git commit -m "Apply screen 001 owner card UI changes to App.js"
+          git commit -m "Apply screen 001 header title to App.js"
           git push
