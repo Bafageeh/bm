@@ -6,6 +6,7 @@ use App\Models\Building;
 use App\Models\Expense;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ExpenseController extends BaseApiController
 {
@@ -13,13 +14,15 @@ class ExpenseController extends BaseApiController
     {
         $this->assertCanAccessBuilding($request, $building);
 
-        $expenses = $building->expenses()
-            ->with(['owners:id,name'])
+        $query = $building->expenses()
             ->latest('expense_date')
-            ->latest('id')
-            ->get();
+            ->latest('id');
 
-        return ['data' => $expenses];
+        if (Schema::hasTable('expense_owner')) {
+            $query->with(['owners:id,name']);
+        }
+
+        return ['data' => $query->get()];
     }
 
     public function store(Request $request, Building $building)
@@ -29,6 +32,7 @@ class ExpenseController extends BaseApiController
         $data = $this->validatedData($request, $building);
         $ownerIds = $data['owner_ids'] ?? [];
         unset($data['owner_ids']);
+        $data = $this->prepareExpenseDataForStorage($data);
 
         $expense = DB::transaction(function () use ($building, $data, $ownerIds) {
             $expense = $building->expenses()->create($data);
@@ -36,7 +40,7 @@ class ExpenseController extends BaseApiController
             return $expense;
         });
 
-        return response()->json(['data' => $expense->fresh(['owners:id,name'])], 201);
+        return response()->json(['data' => $this->freshExpense($expense)], 201);
     }
 
     public function update(Request $request, Building $building, Expense $expense)
@@ -47,13 +51,14 @@ class ExpenseController extends BaseApiController
         $data = $this->validatedData($request, $building);
         $ownerIds = $data['owner_ids'] ?? [];
         unset($data['owner_ids']);
+        $data = $this->prepareExpenseDataForStorage($data);
 
         DB::transaction(function () use ($expense, $data, $ownerIds) {
             $expense->update($data);
             $this->syncTargetOwners($expense, $ownerIds);
         });
 
-        return ['data' => $expense->fresh(['owners:id,name'])];
+        return ['data' => $this->freshExpense($expense)];
     }
 
     public function destroy(Request $request, Building $building, Expense $expense)
@@ -97,9 +102,22 @@ class ExpenseController extends BaseApiController
         return $data;
     }
 
+    private function prepareExpenseDataForStorage(array $data): array
+    {
+        if (! Schema::hasColumn('expenses', 'scope')) {
+            unset($data['scope']);
+        }
+
+        return $data;
+    }
+
     private function syncTargetOwners(Expense $expense, array $ownerIds): void
     {
-        if ($expense->scope !== 'selected') {
+        if (! Schema::hasTable('expense_owner')) {
+            return;
+        }
+
+        if (! Schema::hasColumn('expenses', 'scope') || $expense->scope !== 'selected') {
             $expense->owners()->detach();
             return;
         }
@@ -107,6 +125,13 @@ class ExpenseController extends BaseApiController
         $share = count($ownerIds) > 0 ? round(((float) $expense->amount) / count($ownerIds), 2) : null;
         $sync = collect($ownerIds)->mapWithKeys(fn ($ownerId) => [$ownerId => ['share_amount' => $share]])->all();
         $expense->owners()->sync($sync);
+    }
+
+    private function freshExpense(Expense $expense): Expense
+    {
+        return Schema::hasTable('expense_owner')
+            ? $expense->fresh(['owners:id,name'])
+            : $expense->fresh();
     }
 
     private function assertExpenseBelongsToBuilding(Building $building, Expense $expense): void
