@@ -40,6 +40,7 @@ jobs:
             cd /mnt/home-storage/home/pmsa/apps/bm/bm-mobile
             node scripts/add-screen-numbers.js || true
             node scripts/manager-registration-ui.js || true
+            node scripts/screen4-expenses-header.js || true
 
             lsof -ti:8084 | xargs -r kill -9 || true
 
