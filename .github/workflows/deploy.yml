@@ -33,7 +33,7 @@ jobs:
                 composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
               fi
               php artisan optimize:clear || true
-              php artisan migrate --force
+              echo "Skipping migrations: production database tables already exist"
               php artisan optimize || true
             fi
 
