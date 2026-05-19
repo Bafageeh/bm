@@ -17,6 +17,24 @@ function replaceOnce(search, replacement, label) {
 }
 
 replaceOnce(
+  'function ScreenCode({ code }) { return <View style={styles.screenCodeBadge}><Text style={styles.screenCodeText}>{code}</Text></View>; }',
+  'function ScreenCode({ code, style }) { return <View style={[styles.screenCodeBadge, style]}><Text style={styles.screenCodeText}>{code}</Text></View>; }',
+  'Screen code custom style support'
+);
+
+replaceOnce(
+  '<ScreenCode code="#S-004" />{groupedExpenses.length === 0 ?',
+  '<ScreenCode code="#S-004" style={styles.expensesScreenCodeBadge} />{groupedExpenses.length === 0 ?',
+  'S-004 screen code badge position'
+);
+
+replaceOnce(
+  'expensesScreenContent: { paddingTop: 14 }, heroCard:',
+  'expensesScreenContent: { paddingTop: 14 }, expensesScreenCodeBadge: { transform: [{ translateX: 50 }] }, heroCard:',
+  'S-004 screen code badge right offset'
+);
+
+replaceOnce(
   '<ScreenCode code="#S-001" />{(owners || []).length === 0 ?',
   '<ScreenCode code="#S-002" />{(owners || []).length === 0 ?',
   'Owners screen number'
