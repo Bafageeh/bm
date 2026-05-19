@@ -8,6 +8,16 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('expense_categories')) {
+            Schema::table('expense_categories', function (Blueprint $table) {
+                if (! Schema::hasColumn('expense_categories', 'sort_order')) {
+                    $table->unsignedInteger('sort_order')->default(0)->after('name');
+                }
+            });
+
+            return;
+        }
+
         Schema::create('expense_categories', function (Blueprint $table) {
             $table->id();
             $table->foreignId('building_id')->constrained()->cascadeOnDelete();
