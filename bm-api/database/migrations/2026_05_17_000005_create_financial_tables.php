@@ -16,8 +16,18 @@ return new class extends Migration
             $table->date('expense_date');
             $table->text('description')->nullable();
             $table->string('attachment_path')->nullable();
+            $table->string('scope')->default('all')->index();
             $table->timestamps();
             $table->index(['building_id', 'expense_date']);
+        });
+
+        Schema::create('expense_owner', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('expense_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('owner_id')->constrained()->cascadeOnDelete();
+            $table->decimal('share_amount', 12, 2)->nullable();
+            $table->timestamps();
+            $table->unique(['expense_id', 'owner_id']);
         });
 
         Schema::create('owner_payments', function (Blueprint $table) {
@@ -37,6 +47,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('owner_payments');
+        Schema::dropIfExists('expense_owner');
         Schema::dropIfExists('expenses');
     }
 };
