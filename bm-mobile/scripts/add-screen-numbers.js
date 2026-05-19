@@ -16,6 +16,15 @@ function replaceOnce(search, replacement, label) {
   console.log(`${label}: patched.`);
 }
 
+function replaceAll(search, replacement, label) {
+  if (!code.includes(search)) {
+    console.log(`${label}: pattern not found or already updated.`);
+    return;
+  }
+  code = code.split(search).join(replacement);
+  console.log(`${label}: patched.`);
+}
+
 replaceOnce(
   'function ScreenCode({ code }) { return <View style={styles.screenCodeBadge}><Text style={styles.screenCodeText}>{code}</Text></View>; }',
   'function ScreenCode({ code, style }) { return <View style={[styles.screenCodeBadge, style]}><Text style={styles.screenCodeText}>{code}</Text></View>; }',
@@ -30,8 +39,14 @@ replaceOnce(
 
 replaceOnce(
   'expensesScreenContent: { paddingTop: 14 }, heroCard:',
-  'expensesScreenContent: { paddingTop: 14 }, expensesScreenCodeBadge: { transform: [{ translateX: 50 }] }, heroCard:',
+  'expensesScreenContent: { paddingTop: 14 }, expensesScreenCodeBadge: { transform: [{ translateX: 150 }] }, heroCard:',
   'S-004 screen code badge right offset'
+);
+
+replaceAll(
+  'expensesScreenCodeBadge: { transform: [{ translateX: 50 }] }',
+  'expensesScreenCodeBadge: { transform: [{ translateX: 150 }] }',
+  'S-004 screen code badge right offset from 50 to 150'
 );
 
 replaceOnce(
