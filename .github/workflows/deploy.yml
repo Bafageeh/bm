@@ -22,7 +22,22 @@ jobs:
             cd /mnt/home-storage/home/pmsa/apps/bm
             git fetch origin main
             git reset --hard origin/main
-            cd bm-mobile
+
+            if [ -d bm-api ] && [ -f bm-api/artisan ]; then
+              echo "Deploying Laravel API"
+              cd /mnt/home-storage/home/pmsa/apps/bm/bm-api
+              mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache
+              chown -R pmsa:pmsa storage bootstrap/cache || true
+              chmod -R ug+rwX storage bootstrap/cache || true
+              if [ -f composer.json ]; then
+                composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+              fi
+              php artisan optimize:clear || true
+              php artisan migrate --force
+              php artisan optimize || true
+            fi
+
+            cd /mnt/home-storage/home/pmsa/apps/bm/bm-mobile
             node scripts/add-screen-numbers.js || true
             node scripts/manager-registration-ui.js || true
 
