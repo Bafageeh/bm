@@ -1,5 +1,6 @@
 name: Build BM Android Release APK
 
+# Builds an installable release APK with the JS bundle packaged inside the APK.
 on:
   workflow_dispatch:
   push:
