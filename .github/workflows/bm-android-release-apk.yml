@@ -1,0 +1,66 @@
+name: Build BM Android Release APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'bm-mobile/**'
+      - '.github/workflows/bm-android-release-apk.yml'
+
+jobs:
+  build-release-apk:
+    name: Build release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        working-directory: bm-mobile
+        run: npm install --legacy-peer-deps
+
+      - name: Generate Android project
+        working-directory: bm-mobile
+        env:
+          EXPO_PUBLIC_API_URL: https://bm.pm.sa/api
+        run: npx expo prebuild --platform android --clean --non-interactive
+
+      - name: Build release APK with bundled JS
+        working-directory: bm-mobile/android
+        env:
+          EXPO_PUBLIC_API_URL: https://bm.pm.sa/api
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: |
+          mkdir -p build-output
+          cp bm-mobile/android/app/build/outputs/apk/release/app-release.apk build-output/bm-union-owners-release.apk
+          ls -lh build-output
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bm-union-owners-release-apk
+          path: build-output/bm-union-owners-release.apk
+          if-no-files-found: error
+          retention-days: 14
