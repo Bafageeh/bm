@@ -12,17 +12,14 @@ function replaceOnce(searchValue, replaceValue) {
   }
 }
 
-if (!source.includes("from 'expo-notifications'")) {
-  replaceOnce(
-    "import * as SecureStore from 'expo-secure-store';",
-    "import * as SecureStore from 'expo-secure-store';\nimport * as Notifications from 'expo-notifications';"
-  );
+if (source.includes("import * as Notifications from 'expo-notifications';")) {
+  replaceOnce("import * as Notifications from 'expo-notifications';\n", '');
 }
 
 if (!source.includes('const NOTIFICATION_CHANNEL_ID')) {
   replaceOnce(
     "I18nManager.forceRTL(false);\n",
-    `I18nManager.forceRTL(false);\n\nconst NOTIFICATION_CHANNEL_ID = 'bm-main-alerts';\n\nNotifications.setNotificationHandler({\n  handleNotification: async () => ({\n    shouldShowAlert: true,\n    shouldShowBanner: true,\n    shouldShowList: true,\n    shouldPlaySound: true,\n    shouldSetBadge: false,\n  }),\n});\n\nasync function prepareNotifications() {\n  try {\n    if (Platform.OS === 'android') {\n      await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNEL_ID, {\n        name: 'تنبيهات اتحاد الملاك',\n        importance: Notifications.AndroidImportance.MAX,\n        vibrationPattern: [0, 250, 250, 250],\n        lightColor: '#0f766e',\n        sound: 'default',\n        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,\n      });\n    }\n\n    const current = await Notifications.getPermissionsAsync();\n    const finalStatus = current.status === 'granted' ? current.status : (await Notifications.requestPermissionsAsync()).status;\n    return finalStatus === 'granted';\n  } catch (error) {\n    console.warn('BM notifications setup failed', error?.message || error);\n    return false;\n  }\n}\n\nasync function notifyLocal(title, body) {\n  try {\n    await Notifications.scheduleNotificationAsync({\n      content: {\n        title,\n        body,\n        sound: 'default',\n        priority: Notifications.AndroidNotificationPriority.MAX,\n      },\n      trigger: null,\n    });\n  } catch (_) {\n    Alert.alert(title, body);\n  }\n}\n`
+    `I18nManager.forceRTL(false);\n\nconst NOTIFICATION_CHANNEL_ID = 'bm-main-alerts';\nlet NotificationsModule = null;\n\nfunction getNotificationsModule() {\n  try {\n    if (!NotificationsModule) {\n      NotificationsModule = require('expo-notifications');\n      NotificationsModule.setNotificationHandler?.({\n        handleNotification: async () => ({\n          shouldShowAlert: true,\n          shouldShowBanner: true,\n          shouldShowList: true,\n          shouldPlaySound: true,\n          shouldSetBadge: false,\n        }),\n      });\n    }\n    return NotificationsModule;\n  } catch (error) {\n    console.warn('BM notifications module unavailable', error?.message || error);\n    return null;\n  }\n}\n\nasync function prepareNotifications() {\n  const Notifications = getNotificationsModule();\n  if (!Notifications) return false;\n  try {\n    if (Platform.OS === 'android') {\n      await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNEL_ID, {\n        name: 'تنبيهات اتحاد الملاك',\n        importance: Notifications.AndroidImportance?.MAX ?? 5,\n        vibrationPattern: [0, 250, 250, 250],\n        lightColor: '#0f766e',\n        sound: 'default',\n        lockscreenVisibility: Notifications.AndroidNotificationVisibility?.PUBLIC,\n      });\n    }\n\n    const current = await Notifications.getPermissionsAsync();\n    const finalStatus = current.status === 'granted' ? current.status : (await Notifications.requestPermissionsAsync()).status;\n    return finalStatus === 'granted';\n  } catch (error) {\n    console.warn('BM notifications setup failed', error?.message || error);\n    return false;\n  }\n}\n\nasync function notifyLocal(title, body) {\n  const Notifications = getNotificationsModule();\n  try {\n    const ready = await prepareNotifications();\n    if (!Notifications || !ready) return Alert.alert(title, body);\n    await Notifications.scheduleNotificationAsync({\n      content: {\n        title,\n        body,\n        sound: 'default',\n        priority: Notifications.AndroidNotificationPriority?.MAX,\n      },\n      trigger: null,\n    });\n  } catch (_) {\n    Alert.alert(title, body);\n  }\n}\n`
   );
 }
 
@@ -35,10 +32,12 @@ if (!source.includes('function HeaderIconButton')) {
   );
 }
 
-if (source.includes('const [booting, setBooting] = useState(true); useEffect(() => { SecureStore')) {
+// لا نطلب صلاحية التنبيهات عند فتح التطبيق حتى لا تسبب إغلاقاً مفاجئاً في بعض الأجهزة.
+// يتم تجهيز القناة وطلب الصلاحية عند الضغط على زر الجرس أو عند ربط تنبيهات السيرفر لاحقاً.
+if (source.includes('const [booting, setBooting] = useState(true); useEffect(() => { prepareNotifications(); }, []); useEffect(() => { SecureStore')) {
   replaceOnce(
-    'const [booting, setBooting] = useState(true); useEffect(() => { SecureStore',
-    'const [booting, setBooting] = useState(true); useEffect(() => { prepareNotifications(); }, []); useEffect(() => { SecureStore'
+    'const [booting, setBooting] = useState(true); useEffect(() => { prepareNotifications(); }, []); useEffect(() => { SecureStore',
+    'const [booting, setBooting] = useState(true); useEffect(() => { SecureStore'
   );
 }
 
@@ -63,7 +62,7 @@ replaceOnce(
 
 if (changed) {
   fs.writeFileSync(appPath, source);
-  console.log('Applied BM beautiful icons and notifications patch.');
+  console.log('Applied BM beautiful icons and safe notifications patch.');
 } else {
-  console.log('BM beautiful icons and notifications patch is already applied.');
+  console.log('BM beautiful icons and safe notifications patch is already applied.');
 }
