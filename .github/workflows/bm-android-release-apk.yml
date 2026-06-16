@@ -38,6 +38,10 @@ jobs:
         working-directory: bm-mobile
         run: npm install --legacy-peer-deps
 
+      - name: Apply BM UI and notifications patch
+        working-directory: bm-mobile
+        run: npm run patch-ui
+
       - name: Generate Android project
         working-directory: bm-mobile
         env:
