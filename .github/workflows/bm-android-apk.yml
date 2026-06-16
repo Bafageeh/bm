@@ -66,6 +66,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bm-union-owners-debug-apk
-          path: bm-mobile/build-output/bm-union-owners-debug.apk
+          path: build-output/bm-union-owners-debug.apk
           if-no-files-found: error
           retention-days: 14
