@@ -38,10 +38,6 @@ jobs:
         working-directory: bm-mobile
         run: npm install --legacy-peer-deps
 
-      - name: Install compatible notifications package
-        working-directory: bm-mobile
-        run: npx expo install expo-notifications --non-interactive
-
       - name: Apply BM UI and notifications patch
         working-directory: bm-mobile
         run: npm run patch-ui
