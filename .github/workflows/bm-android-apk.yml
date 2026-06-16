@@ -1,0 +1,73 @@
+name: Build BM Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'bm-mobile/**'
+      - '.github/workflows/bm-android-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build APK without EAS quota
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bm-mobile
+    env:
+      EXPO_PUBLIC_API_URL: https://bm.pm.sa/api
+      CI: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bm-mobile/package.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Apply local project fixes
+        run: |
+          if [ -f scripts/owner-actions-menu.js ]; then node scripts/owner-actions-menu.js; fi
+          if [ -f scripts/add-screen-numbers.js ]; then node scripts/add-screen-numbers.js; fi
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --clean --non-interactive
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: |
+          mkdir -p ../build-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk ../build-output/bm-union-owners-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bm-union-owners-debug-apk
+          path: bm-mobile/build-output/bm-union-owners-debug.apk
+          if-no-files-found: error
+          retention-days: 14
