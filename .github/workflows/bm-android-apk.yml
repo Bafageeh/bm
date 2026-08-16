@@ -14,13 +14,14 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build APK without EAS quota
+    name: Build standalone Release APK without EAS quota
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: bm-mobile
     env:
       EXPO_PUBLIC_API_URL: https://bm.pm.sa/api
+      NODE_ENV: production
       CI: true
     steps:
       - name: Checkout repository
@@ -47,25 +48,32 @@ jobs:
         run: |
           if [ -f scripts/owner-actions-menu.js ]; then node scripts/owner-actions-menu.js; fi
           if [ -f scripts/add-screen-numbers.js ]; then node scripts/add-screen-numbers.js; fi
+          if [ -f scripts/beautify-icons-and-notifications.js ]; then node scripts/beautify-icons-and-notifications.js; fi
 
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean --non-interactive
 
-      - name: Build debug APK
+      - name: Build standalone release APK
         run: |
           cd android
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
-      - name: Rename APK
+      - name: Verify and rename APK
         run: |
           mkdir -p ../build-output
-          cp android/app/build/outputs/apk/debug/app-debug.apk ../build-output/bm-union-owners-debug.apk
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "Release APK was not generated at $APK_PATH"
+            find android/app/build/outputs/apk -maxdepth 3 -type f -name '*.apk' -print || true
+            exit 1
+          fi
+          cp "$APK_PATH" ../build-output/owners-association-release.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bm-union-owners-debug-apk
-          path: build-output/bm-union-owners-debug.apk
+          name: owners-association-release-apk
+          path: build-output/owners-association-release.apk
           if-no-files-found: error
           retention-days: 14
