@@ -12,6 +12,13 @@ function replaceOnce(searchValue, replaceValue) {
   }
 }
 
+if (!source.includes("import { useFonts } from 'expo-font';")) {
+  replaceOnce(
+    "import { StatusBar } from 'expo-status-bar';\n",
+    "import { StatusBar } from 'expo-status-bar';\nimport { useFonts } from 'expo-font';\n"
+  );
+}
+
 if (source.includes("import * as Notifications from 'expo-notifications';")) {
   replaceOnce("import * as Notifications from 'expo-notifications';\n", '');
 }
@@ -41,6 +48,22 @@ if (source.includes('const [booting, setBooting] = useState(true); useEffect(() 
   );
 }
 
+// Preload the vector icon fonts before rendering the UI. This prevents invisible icon glyphs
+// in standalone/release builds on Android and on the first app launch.
+if (!source.includes('const [iconFontsLoaded, iconFontsError]')) {
+  replaceOnce(
+    'export default function App() { const [token, setToken] = useState(null);',
+    'export default function App() { const [iconFontsLoaded, iconFontsError] = useFonts({ ...Ionicons.font, ...MaterialCommunityIcons.font }); const [token, setToken] = useState(null);'
+  );
+}
+
+if (!source.includes('if (!iconFontsLoaded && !iconFontsError)')) {
+  replaceOnce(
+    '}; if (booting) return <SafeAreaProvider><LoadingScreen /></SafeAreaProvider>;',
+    '}; if (!iconFontsLoaded && !iconFontsError) return <SafeAreaProvider><LoadingScreen /></SafeAreaProvider>; if (iconFontsError) console.warn(\'BM icon fonts failed to load\', iconFontsError); if (booting) return <SafeAreaProvider><LoadingScreen /></SafeAreaProvider>;'
+  );
+}
+
 replaceOnce(
   '<Ionicons name="ellipsis-vertical" size={20} color="#0f172a" />',
   '<MaterialCommunityIcons name="dots-vertical-circle-outline" size={24} color="#0f766e" />'
@@ -62,7 +85,7 @@ replaceOnce(
 
 if (changed) {
   fs.writeFileSync(appPath, source);
-  console.log('Applied BM beautiful icons and safe notifications patch.');
+  console.log('Applied BM beautiful icons, icon-font preload, and safe notifications patch.');
 } else {
   console.log('BM beautiful icons and safe notifications patch is already applied.');
 }
