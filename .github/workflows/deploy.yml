@@ -26,7 +26,7 @@ jobs:
             if [ -d bm-api ] && [ -f bm-api/artisan ]; then
               echo "Deploying Laravel API"
               cd /mnt/home-storage/home/pmsa/apps/bm/bm-api
-              mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache
+              mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache storage/app/expo-updates
               chown -R pmsa:pmsa storage bootstrap/cache || true
               chmod -R ug+rwX storage bootstrap/cache || true
               if [ -f composer.json ]; then
@@ -38,9 +38,25 @@ jobs:
             fi
 
             cd /mnt/home-storage/home/pmsa/apps/bm/bm-mobile
-            node scripts/add-screen-numbers.js || true
-            node scripts/manager-registration-ui.js || true
-            node scripts/screen4-expenses-header.js || true
+            npm install --legacy-peer-deps
+            npm run patch-ui
+
+            echo "Publishing self-hosted OTA update"
+            rm -rf update-dist
+            EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo export --platform android --output-dir update-dist
+            EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo config --type public --json > update-dist/expoConfig.json
+            test -f update-dist/metadata.json
+
+            RUNTIME_VERSION="1.0.1"
+            RELEASE_ID="$(date +%s)"
+            UPDATE_DEST="/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates/${RUNTIME_VERSION}/${RELEASE_ID}"
+            mkdir -p "$UPDATE_DEST"
+            cp -a update-dist/. "$UPDATE_DEST/"
+            chown -R pmsa:pmsa "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates" || true
+            chmod -R ug+rwX "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates" || true
+
+            # Keep the latest 10 OTA releases for this runtime.
+            ls -1dt "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates/${RUNTIME_VERSION}"/* 2>/dev/null | tail -n +11 | xargs -r rm -rf
 
             lsof -ti:8084 | xargs -r kill -9 || true
 
