@@ -59,13 +59,13 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p build-output
-          cp bm-mobile/android/app/build/outputs/apk/release/app-release.apk build-output/bm-union-owners-v1.0.1-icons-fixed.apk
+          cp bm-mobile/android/app/build/outputs/apk/release/app-release.apk build-output/bm-union-owners-v1.0.2-svg-icons.apk
           ls -lh build-output
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bm-union-owners-v1.0.1-icons-fixed
-          path: build-output/bm-union-owners-v1.0.1-icons-fixed.apk
+          name: bm-union-owners-v1.0.2-svg-icons
+          path: build-output/bm-union-owners-v1.0.2-svg-icons.apk
           if-no-files-found: error
           retention-days: 14
