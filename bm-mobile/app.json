@@ -3,11 +3,18 @@
     "name": "إدارة اتحاد الملاك",
     "slug": "bm-mobile",
     "version": "1.0.1",
+    "runtimeVersion": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "bm",
     "assetBundlePatterns": ["**/*"],
+    "updates": {
+      "enabled": true,
+      "url": "https://bm.pm.sa/api/updates/manifest",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "sa.pm.bm",
