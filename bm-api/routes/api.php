@@ -8,9 +8,12 @@ use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ManagerRegistrationController;
 use App\Http\Controllers\Api\OwnerController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\UpdateController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => ['ok' => true, 'app' => 'BM API']);
+Route::get('/updates/manifest', [UpdateController::class, 'manifest']);
+Route::get('/updates/assets', [UpdateController::class, 'asset']);
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/manager-registration/request-otp', [ManagerRegistrationController::class, 'requestOtp']);
