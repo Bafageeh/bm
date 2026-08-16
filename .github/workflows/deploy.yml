@@ -58,6 +58,15 @@ jobs:
             # Keep the latest 10 OTA releases for this runtime.
             ls -1dt "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates/${RUNTIME_VERSION}"/* 2>/dev/null | tail -n +11 | xargs -r rm -rf
 
+            echo "Verifying OTA manifest endpoint"
+            curl --fail --silent --show-error --max-time 20 \
+              -H "expo-platform: android" \
+              -H "expo-runtime-version: ${RUNTIME_VERSION}" \
+              -H "expo-protocol-version: 1" \
+              "https://bm.pm.sa/api/updates/manifest" \
+              -o /tmp/bm-ota-manifest-response
+            test -s /tmp/bm-ota-manifest-response
+
             lsof -ti:8084 | xargs -r kill -9 || true
 
             BROWSER=none EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=bm.pm.sa \
