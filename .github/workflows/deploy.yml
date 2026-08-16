@@ -35,37 +35,47 @@ jobs:
               php artisan optimize:clear || true
               echo "Skipping migrations: production database tables already exist"
               php artisan optimize || true
+
+              # Runtime 1.0.1 did not contain react-native-svg natively. Never serve
+              # the new SVG UI bundle to that binary.
+              rm -rf storage/app/expo-updates/1.0.1
             fi
 
             cd /mnt/home-storage/home/pmsa/apps/bm/bm-mobile
             npm install --legacy-peer-deps
             npm run patch-ui
 
-            echo "Publishing self-hosted OTA update"
-            rm -rf update-dist
-            EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo export --platform android --output-dir update-dist
-            EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo config --type public --json > update-dist/expoConfig.json
-            test -f update-dist/metadata.json
+            RUNTIME_VERSION="$(node -p "require('./app.json').expo.runtimeVersion")"
+            echo "Current runtime: ${RUNTIME_VERSION}"
 
-            RUNTIME_VERSION="1.0.1"
-            RELEASE_ID="$(date +%s)"
-            UPDATE_DEST="/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates/${RUNTIME_VERSION}/${RELEASE_ID}"
-            mkdir -p "$UPDATE_DEST"
-            cp -a update-dist/. "$UPDATE_DEST/"
-            chown -R pmsa:pmsa "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates" || true
-            chmod -R ug+rwX "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates" || true
+            if [ "$RUNTIME_VERSION" = "1.0.2" ]; then
+              echo "Publishing self-hosted OTA update"
+              rm -rf update-dist
+              EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo export --platform android --output-dir update-dist
+              EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo config --type public --json > update-dist/expoConfig.json
+              test -f update-dist/metadata.json
 
-            # Keep the latest 10 OTA releases for this runtime.
-            ls -1dt "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates/${RUNTIME_VERSION}"/* 2>/dev/null | tail -n +11 | xargs -r rm -rf
+              RELEASE_ID="$(date +%s)"
+              UPDATE_DEST="/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates/${RUNTIME_VERSION}/${RELEASE_ID}"
+              mkdir -p "$UPDATE_DEST"
+              cp -a update-dist/. "$UPDATE_DEST/"
+              chown -R pmsa:pmsa "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates" || true
+              chmod -R ug+rwX "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates" || true
 
-            echo "Verifying OTA manifest endpoint"
-            curl --fail --silent --show-error --max-time 20 \
-              -H "expo-platform: android" \
-              -H "expo-runtime-version: ${RUNTIME_VERSION}" \
-              -H "expo-protocol-version: 1" \
-              "https://bm.pm.sa/api/updates/manifest" \
-              -o /tmp/bm-ota-manifest-response
-            test -s /tmp/bm-ota-manifest-response
+              # Keep the latest 10 OTA releases for this runtime.
+              ls -1dt "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates/${RUNTIME_VERSION}"/* 2>/dev/null | tail -n +11 | xargs -r rm -rf
+
+              echo "Verifying OTA manifest endpoint"
+              curl --fail --silent --show-error --max-time 20 \
+                -H "expo-platform: android" \
+                -H "expo-runtime-version: ${RUNTIME_VERSION}" \
+                -H "expo-protocol-version: 1" \
+                "https://bm.pm.sa/api/updates/manifest" \
+                -o /tmp/bm-ota-manifest-response
+              test -s /tmp/bm-ota-manifest-response
+            else
+              echo "Skipping OTA publish until SVG-capable runtime 1.0.2 is active."
+            fi
 
             lsof -ti:8084 | xargs -r kill -9 || true
 
