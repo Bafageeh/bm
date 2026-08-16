@@ -4,15 +4,22 @@
     "slug": "bm-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "bm",
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "sa.pm.bm"
+      "bundleIdentifier": "sa.pm.bm",
+      "icon": "./assets/icon.png"
     },
     "android": {
-      "package": "sa.pm.bm"
+      "package": "sa.pm.bm",
+      "icon": "./assets/icon.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#051836"
+      }
     },
     "extra": {
       "apiUrl": "https://bm.pm.sa/api"
