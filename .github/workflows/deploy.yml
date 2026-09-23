@@ -1,9 +1,6 @@
 name: Deploy BM
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
