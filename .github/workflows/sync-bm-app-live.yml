@@ -36,5 +36,13 @@ jobs:
               echo "Old row quick-add button still exists"
               exit 1
             fi
+
+            rm -rf /home/pmsa/apps/.tmp/bm-jsx-check
+            if ! runuser -u pmsa -- bash -lc "cd '$ROOT/bm-mobile' && EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo export --platform android --output-dir /home/pmsa/apps/.tmp/bm-jsx-check >/tmp/bm-jsx-check.log 2>&1"; then
+              cat /tmp/bm-jsx-check.log
+              exit 1
+            fi
+            tail -n 20 /tmp/bm-jsx-check.log
+
             lsof -iTCP:8083 -sTCP:LISTEN
             echo "Live App.js synced; category is locked when adding from its details modal."
