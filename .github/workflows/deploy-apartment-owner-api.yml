@@ -9,6 +9,9 @@ on:
       - "bm-api/app/Http/Controllers/Api/BaseApiController.php"
       - "bm-api/app/Http/Controllers/Api/BuildingController.php"
       - "bm-api/app/Http/Controllers/Api/DashboardController.php"
+      - "bm-api/app/Http/Controllers/Api/PaymentController.php"
+      - "bm-api/app/Models/OwnerPayment.php"
+      - "bm-api/database/migrations/2026_09_24_000000_add_apartment_id_to_owner_payments.php"
       - "bm-api/routes/api.php"
   workflow_dispatch:
 
@@ -38,6 +41,9 @@ jobs:
               app/Http/Controllers/Api/BuildingController.php \
               app/Http/Controllers/Api/DashboardController.php \
               app/Http/Controllers/Api/OwnerController.php \
+              app/Http/Controllers/Api/PaymentController.php \
+              app/Models/OwnerPayment.php \
+              database/migrations/2026_09_24_000000_add_apartment_id_to_owner_payments.php \
               routes/api.php
             do
               git show "$REF:bm-api/$file" > "/tmp/bm-api-$(basename "$file")"
@@ -46,6 +52,7 @@ jobs:
             done
 
             cd "$API"
+            php artisan migrate --path=database/migrations/2026_09_24_000000_add_apartment_id_to_owner_payments.php --force
             php artisan optimize:clear
             php artisan route:list --path=api/buildings | grep -q "apartments/{apartment}/owner"
             echo "BM apartment owner API is live."
