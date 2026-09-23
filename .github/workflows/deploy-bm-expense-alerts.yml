@@ -59,7 +59,8 @@ jobs:
 
             chown -R pmsa:pmsa "$API/storage" "$API/bootstrap/cache" "$MOBILE"
             cd "$API"
-            runuser -u pmsa -- php artisan migrate --force
+            runuser -u pmsa -- php artisan migrate --path=database/migrations/2026_09_23_203000_create_push_tokens_table.php --force
+            runuser -u pmsa -- php artisan migrate --path=database/migrations/2026_09_23_203100_create_expense_notification_events_table.php --force
             runuser -u pmsa -- php artisan optimize:clear
             runuser -u pmsa -- php artisan route:list | grep -q "push-tokens"
             runuser -u pmsa -- php artisan list | grep -q "bm:send-expense-notifications"
