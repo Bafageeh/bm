@@ -174,6 +174,50 @@ async function notifyLocal(title, body) {
   }
 }
 
+const PUSH_TOKEN_STORAGE_KEY = 'bm_expo_push_token';
+
+async function registerPushNotifications(apiToken) {
+  if (!apiToken) return false;
+  const Notifications = getNotificationsModule();
+  try {
+    const ready = await prepareNotifications();
+    if (!Notifications || !ready) return false;
+
+    const projectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID || undefined;
+    const result = projectId
+      ? await Notifications.getExpoPushTokenAsync({ projectId })
+      : await Notifications.getExpoPushTokenAsync();
+    const pushToken = result?.data;
+    if (!pushToken) return false;
+
+    await request('/push-tokens', {
+      method: 'POST',
+      body: JSON.stringify({ token: pushToken, platform: Platform.OS }),
+    }, apiToken);
+    await SecureStore.setItemAsync(PUSH_TOKEN_STORAGE_KEY, pushToken);
+    return true;
+  } catch (error) {
+    console.warn('BM push token registration unavailable', error?.message || error);
+    return false;
+  }
+}
+
+async function unregisterPushNotifications(apiToken) {
+  if (!apiToken) return;
+  try {
+    const pushToken = await SecureStore.getItemAsync(PUSH_TOKEN_STORAGE_KEY);
+    if (!pushToken) return;
+    await request('/push-tokens', {
+      method: 'DELETE',
+      body: JSON.stringify({ token: pushToken }),
+    }, apiToken);
+  } catch (error) {
+    console.warn('BM push token unregister failed', error?.message || error);
+  } finally {
+    try { await SecureStore.deleteItemAsync(PUSH_TOKEN_STORAGE_KEY); } catch (_) {}
+  }
+}
+
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://bm.pm.sa/api';
 const DEFAULT_EXPENSE_CATEGORIES = ['حارس', 'كهرباء', 'مياه', 'نظافة', 'صيانة', 'مشتريات', 'مصعد', 'أخرى'];
 const money = (v) => `${Number(v || 0).toLocaleString('ar-SA', { maximumFractionDigits: 2 })} ريال`;
@@ -759,7 +803,58 @@ function useAutomaticOtaUpdates() {
 function LoadingScreen() { return <View style={styles.loading}><ActivityIndicator color="#0f766e" size="large" /><Text style={styles.loadingText}>جاري التحميل...</Text></View>; }
 function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async () => { if (!selectedBuilding) return; setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = dashboard?.owners || []; return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} owners={owners} reload={reload} setTab={setTab} setInitialPaymentOwnerId={setInitialPaymentOwnerId} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'payments'} icon="wallet-outline" title="الدفعات" onPress={() => setTab('payments')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
 function TabButton({ active, icon, title, onPress }) { return <Pressable onPress={onPress} style={styles.tabBtn}><Ionicons name={icon} size={21} color={active ? '#0f766e' : '#94a3b8'} /><Text style={[styles.tabText, active && styles.tabTextActive]}>{title}</Text></Pressable>; }
-export default function App() { useAutomaticOtaUpdates(); const [token, setToken] = useState(null); const [user, setUser] = useState(null); const [selectedBuilding, setSelectedBuilding] = useState(null); const [booting, setBooting] = useState(true); useEffect(() => { SecureStore.getItemAsync('bm_token').then(async (saved) => { if (saved) { const data = await request('/me', {}, saved); setToken(saved); setUser(data.user); if (data.user?.buildings?.length === 1) setSelectedBuilding(data.user.buildings[0]); } }).catch(() => SecureStore.deleteItemAsync('bm_token')).finally(() => setBooting(false)); }, []); const logout = async () => { try { if (token) await request('/logout', { method: 'POST' }, token); } catch (_) {} await SecureStore.deleteItemAsync('bm_token'); setToken(null); setUser(null); setSelectedBuilding(null); }; if (booting) return <SafeAreaProvider><LoadingScreen /></SafeAreaProvider>; return <SafeAreaProvider>{!token ? <LoginScreen onLogin={(nextToken, nextUser) => { setToken(nextToken); setUser(nextUser); if (nextUser?.buildings?.length === 1) setSelectedBuilding(nextUser.buildings[0]); }} /> : !selectedBuilding && user?.role !== 'owner' ? <BuildingPicker user={user} onSelect={setSelectedBuilding} onLogout={logout} /> : <AppShell token={token} user={user} selectedBuilding={selectedBuilding} setSelectedBuilding={setSelectedBuilding} onLogout={logout} />}</SafeAreaProvider>; }
+export default function App() {
+  useAutomaticOtaUpdates();
+  const [token, setToken] = useState(null);
+  const [user, setUser] = useState(null);
+  const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [booting, setBooting] = useState(true);
+
+  useEffect(() => {
+    SecureStore.getItemAsync('bm_token')
+      .then(async (saved) => {
+        if (saved) {
+          const data = await request('/me', {}, saved);
+          setToken(saved);
+          setUser(data.user);
+          if (data.user?.buildings?.length === 1) setSelectedBuilding(data.user.buildings[0]);
+        }
+      })
+      .catch(() => SecureStore.deleteItemAsync('bm_token'))
+      .finally(() => setBooting(false));
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    registerPushNotifications(token);
+  }, [token]);
+
+  const logout = async () => {
+    try {
+      if (token) {
+        await unregisterPushNotifications(token);
+        await request('/logout', { method: 'POST' }, token);
+      }
+    } catch (_) {}
+    await SecureStore.deleteItemAsync('bm_token');
+    setToken(null);
+    setUser(null);
+    setSelectedBuilding(null);
+  };
+
+  if (booting) return <SafeAreaProvider><LoadingScreen /></SafeAreaProvider>;
+  return <SafeAreaProvider>
+    {!token
+      ? <LoginScreen onLogin={(nextToken, nextUser) => {
+          setToken(nextToken);
+          setUser(nextUser);
+          if (nextUser?.buildings?.length === 1) setSelectedBuilding(nextUser.buildings[0]);
+        }} />
+      : !selectedBuilding && user?.role !== 'owner'
+        ? <BuildingPicker user={user} onSelect={setSelectedBuilding} onLogout={logout} />
+        : <AppShell token={token} user={user} selectedBuilding={selectedBuilding} setSelectedBuilding={setSelectedBuilding} onLogout={logout} />}
+  </SafeAreaProvider>;
+}
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' }, screenWrapper: { flex: 1, backgroundColor: '#f8fafc' }, loginContainer: { flex: 1, backgroundColor: '#ecfdf5' }, loginContent: { flex: 1, padding: 22, justifyContent: 'center' }, logoCircle: { width: 98, height: 98, borderRadius: 49, backgroundColor: '#fff', alignSelf: 'center', justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 }, appName: { fontSize: 27, fontWeight: '900', textAlign: 'center', color: '#0f172a' }, subtitle: { fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8, lineHeight: 23 }, loginCard: { backgroundColor: '#fff', borderRadius: 24, padding: 18, marginTop: 24, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
