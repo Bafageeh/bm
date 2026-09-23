@@ -1,0 +1,51 @@
+name: Deploy BM apartment owner API
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "bm-api/app/Http/Controllers/Api/OwnerController.php"
+      - "bm-api/app/Http/Controllers/Api/BaseApiController.php"
+      - "bm-api/app/Http/Controllers/Api/BuildingController.php"
+      - "bm-api/app/Http/Controllers/Api/DashboardController.php"
+      - "bm-api/routes/api.php"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy apartment owner API
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 3m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+            REF=refs/remotes/origin/apartment-owner-api
+
+            cd "$ROOT"
+            git fetch origin "main:$REF"
+
+            for file in \
+              app/Http/Controllers/Api/BaseApiController.php \
+              app/Http/Controllers/Api/BuildingController.php \
+              app/Http/Controllers/Api/DashboardController.php \
+              app/Http/Controllers/Api/OwnerController.php \
+              routes/api.php
+            do
+              git show "$REF:bm-api/$file" > "/tmp/bm-api-$(basename "$file")"
+              install -o pmsa -g pmsa -m 0644 "/tmp/bm-api-$(basename "$file")" "$API/$file"
+              php -l "$API/$file"
+            done
+
+            cd "$API"
+            php artisan optimize:clear
+            php artisan route:list --path=api/buildings | grep -q "apartments/{apartment}/owner"
+            echo "BM apartment owner API is live."
