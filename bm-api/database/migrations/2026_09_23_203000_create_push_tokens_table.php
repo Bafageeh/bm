@@ -15,7 +15,7 @@ return new class extends Migration
         Schema::create('push_tokens', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('token', 500)->unique();
+            $table->string('token', 255)->unique();
             $table->string('platform', 20)->nullable();
             $table->timestamp('last_seen_at')->nullable();
             $table->timestamps();
