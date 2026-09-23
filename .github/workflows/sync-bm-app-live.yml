@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - "bm-mobile/App.js"
       - ".github/workflows/sync-bm-app-live.yml"
 
 jobs:
@@ -29,9 +30,11 @@ jobs:
             install -o pmsa -g pmsa -m 0644 /tmp/bm-App.js.new "$APP"
             grep -q "openAddFromSelectedCategory" "$APP"
             grep -q "categoryModalAddBtn" "$APP"
+            grep -q "categoryLocked" "$APP"
+            grep -q "lockedCategoryField" "$APP"
             if grep -q "categoryQuickAddBtn" "$APP"; then
               echo "Old row quick-add button still exists"
               exit 1
             fi
             lsof -iTCP:8083 -sTCP:LISTEN
-            echo "Live App.js synced; category add button is inside the floating details modal."
+            echo "Live App.js synced; category is locked when adding from its details modal."
