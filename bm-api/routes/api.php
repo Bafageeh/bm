@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\OwnerController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PushTokenController;
 use App\Http\Controllers\Api\UpdateController;
+use App\Http\Controllers\Api\UserNotificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => ['ok' => true, 'app' => 'BM API']);
@@ -27,6 +28,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/push-tokens', [PushTokenController::class, 'store']);
     Route::delete('/push-tokens', [PushTokenController::class, 'destroy']);
+    Route::get('/notifications', [UserNotificationController::class, 'index']);
+    Route::post('/notifications/read-all', [UserNotificationController::class, 'markAllRead']);
 
     Route::get('/buildings', [BuildingController::class, 'index']);
     Route::post('/buildings', [BuildingController::class, 'store']);
