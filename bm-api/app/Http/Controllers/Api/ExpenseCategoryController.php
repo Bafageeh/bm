@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Building;
 use App\Models\ExpenseCategory;
+use App\Services\ExpenseNotificationService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -48,6 +49,13 @@ class ExpenseCategoryController extends BaseApiController
             'sort_order' => ((int) $building->expenseCategories()->max('sort_order')) + 10,
         ]);
 
+        app(ExpenseNotificationService::class)->queueForManager(
+            $building,
+            $request->user(),
+            'expense_type_created',
+            'تمت إضافة نوع صرف: '.$category->name.'.'
+        );
+
         return response()->json(['data' => $category], 201);
     }
 
@@ -69,7 +77,15 @@ class ExpenseCategoryController extends BaseApiController
             'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : $category->is_active,
         ]);
 
-        return ['data' => $category->fresh()];
+        $freshCategory = $category->fresh();
+        app(ExpenseNotificationService::class)->queueForManager(
+            $building,
+            $request->user(),
+            'expense_type_updated',
+            'تم تحديث نوع الصرف: '.$freshCategory->name.'.'
+        );
+
+        return ['data' => $freshCategory];
     }
 
     public function destroy(Request $request, Building $building, ExpenseCategory $category)
