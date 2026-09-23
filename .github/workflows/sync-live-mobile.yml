@@ -1,0 +1,56 @@
+name: Sync live BM mobile source
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/sync-live-mobile.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.BM_SSH_HOST }}
+          SSH_PORT: ${{ secrets.BM_SSH_PORT }}
+          SSH_USER: ${{ secrets.BM_SSH_USER }}
+          SSH_KEY: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Pull current live mobile files
+        env:
+          SSH_HOST: ${{ secrets.BM_SSH_HOST }}
+          SSH_PORT: ${{ secrets.BM_SSH_PORT }}
+          SSH_USER: ${{ secrets.BM_SSH_USER }}
+        run: |
+          set -e
+          SRC="/mnt/home-storage/home/pmsa/apps/bm/bm-mobile"
+          scp -P "$SSH_PORT" "$SSH_USER@$SSH_HOST:$SRC/App.js" bm-mobile/App.js
+          scp -P "$SSH_PORT" "$SSH_USER@$SSH_HOST:$SRC/app.json" bm-mobile/app.json
+          scp -P "$SSH_PORT" "$SSH_USER@$SSH_HOST:$SRC/package.json" bm-mobile/package.json
+
+      - name: Commit live source snapshot
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bm-mobile/App.js bm-mobile/app.json bm-mobile/package.json
+          if git diff --cached --quiet; then
+            echo "Live source already matches GitHub."
+            exit 0
+          fi
+          git commit -m "Sync live BM mobile source [sync-live]"
+          git push origin main
