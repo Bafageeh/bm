@@ -46,10 +46,9 @@ abstract class BaseApiController extends Controller
     protected function buildingStats(Building $building): array
     {
         $actualApartmentCount = $building->apartments()->count();
-        $apartmentCount = max(1, $actualApartmentCount);
         $totalExpenses = (float) $building->expenses()->sum('amount');
         $totalPayments = (float) $building->payments()->sum('amount');
-        $sharePerApartment = $totalExpenses / $apartmentCount;
+        $sharePerApartment = $actualApartmentCount > 0 ? $totalExpenses / $actualApartmentCount : 0;
         $unassignedApartmentNumbers = $building->apartments()
             ->whereNull('owner_id')
             ->orderByRaw('CAST(number AS UNSIGNED), number')
@@ -59,7 +58,7 @@ abstract class BaseApiController extends Controller
         $unassignedApartmentAmount = $sharePerApartment * $unassignedApartmentCount;
 
         return [
-            'apartment_count' => $apartmentCount,
+            'apartment_count' => $actualApartmentCount,
             'actual_apartment_count' => $actualApartmentCount,
             'total_expenses' => round($totalExpenses, 2),
             'total_payments' => round($totalPayments, 2),
