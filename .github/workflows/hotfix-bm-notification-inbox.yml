@@ -1,0 +1,53 @@
+name: Hotfix BM notification inbox
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/hotfix-bm-notification-inbox.yml"
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy notification inbox backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 3m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+            RAW_BASE="https://raw.githubusercontent.com/Bafageeh/bm/main"
+
+            sync_file() {
+              rel="$1"
+              tmp="/tmp/bm-inbox-$(echo "$rel" | tr '/.' '__')"
+              curl -fsSL "$RAW_BASE/$rel" -o "$tmp"
+              install -D -o pmsa -g pmsa -m 0644 "$tmp" "$ROOT/$rel"
+            }
+
+            sync_file bm-api/app/Models/UserNotification.php
+            sync_file bm-api/app/Http/Controllers/Api/UserNotificationController.php
+            sync_file bm-api/app/Services/ExpenseNotificationService.php
+            sync_file bm-api/routes/api.php
+            sync_file bm-api/database/migrations/2026_09_23_204000_create_user_notifications_table.php
+
+            php -l "$API/app/Models/UserNotification.php"
+            php -l "$API/app/Http/Controllers/Api/UserNotificationController.php"
+            php -l "$API/app/Services/ExpenseNotificationService.php"
+            php -l "$API/routes/api.php"
+
+            cd "$API"
+            runuser -u pmsa -- php artisan migrate --path=database/migrations/2026_09_23_204000_create_user_notifications_table.php --force
+            runuser -u pmsa -- php artisan optimize:clear
+            runuser -u pmsa -- php artisan route:list | grep -q "notifications/read-all"
+            runuser -u pmsa -- php artisan bm:send-expense-notifications
+            crontab -l | grep -q "bm:send-expense-notifications"
+
+            echo "Persistent owner notification inbox is live."
