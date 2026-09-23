@@ -30,11 +30,15 @@ jobs:
             grep -q "bm:send-expense-notifications" "$API/routes/console.php"
             grep -q "registerPushNotifications" "$MOBILE/App.js"
             grep -q "expo-notifications" "$MOBILE/app.json"
+            grep -q "آخر تنبيهات الحساب" "$MOBILE/App.js"
+            grep -q "UserNotification" "$API/app/Services/ExpenseNotificationService.php"
 
             cd "$API"
             runuser -u pmsa -- php artisan migrate:status --path=database/migrations/2026_09_23_203000_create_push_tokens_table.php | grep -q "Ran"
             runuser -u pmsa -- php artisan migrate:status --path=database/migrations/2026_09_23_203100_create_expense_notification_events_table.php | grep -q "Ran"
+            runuser -u pmsa -- php artisan migrate:status --path=database/migrations/2026_09_23_204000_create_user_notifications_table.php | grep -q "Ran"
             runuser -u pmsa -- php artisan route:list | grep -q "push-tokens"
+            runuser -u pmsa -- php artisan route:list | grep -q "notifications/read-all"
             runuser -u pmsa -- php artisan list | grep -q "bm:send-expense-notifications"
             crontab -l | grep -q "bm:send-expense-notifications"
             lsof -iTCP:8083 -sTCP:LISTEN
