@@ -11,7 +11,7 @@ use Illuminate\Validation\Rule;
 
 class ExpenseCategoryController extends BaseApiController
 {
-    private array $defaultCategories = ['حارس', 'كهرباء', 'مياه', 'نظافة', 'صيانة', 'مشتريات', 'مصعد', 'أخرى'];
+    private array $defaultCategories = ['حارس', 'كهرباء', 'مياه', 'نظافة', 'صيانة', 'مشتريات', 'مصعد'];
 
     public function index(Request $request, Building $building)
     {
@@ -34,10 +34,13 @@ class ExpenseCategoryController extends BaseApiController
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100', Rule::unique('expense_categories')->where('building_id', $building->id)],
+            'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $category = $building->expenseCategories()->create([
             'name' => trim($data['name']),
+            'notes' => isset($data['notes']) ? trim((string) $data['notes']) : null,
+            'is_active' => true,
             'sort_order' => ((int) $building->expenseCategories()->max('sort_order')) + 10,
         ]);
 
@@ -52,9 +55,15 @@ class ExpenseCategoryController extends BaseApiController
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100', Rule::unique('expense_categories')->where('building_id', $building->id)->ignore($category->id)],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'is_active' => ['sometimes', 'boolean'],
         ]);
 
-        $category->update(['name' => trim($data['name'])]);
+        $category->update([
+            'name' => trim($data['name']),
+            'notes' => array_key_exists('notes', $data) ? trim((string) ($data['notes'] ?? '')) : $category->notes,
+            'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : $category->is_active,
+        ]);
 
         return ['data' => $category->fresh()];
     }
@@ -72,18 +81,32 @@ class ExpenseCategoryController extends BaseApiController
 
     private function ensureTableExists(): void
     {
-        if (Schema::hasTable('expense_categories')) {
+        if (! Schema::hasTable('expense_categories')) {
+            Schema::create('expense_categories', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('building_id')->constrained()->cascadeOnDelete();
+                $table->string('name', 100);
+                $table->text('notes')->nullable();
+                $table->boolean('is_active')->default(false);
+                $table->unsignedInteger('sort_order')->default(0);
+                $table->timestamps();
+                $table->unique(['building_id', 'name']);
+            });
+
             return;
         }
 
-        Schema::create('expense_categories', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('building_id')->constrained()->cascadeOnDelete();
-            $table->string('name', 100);
-            $table->unsignedInteger('sort_order')->default(0);
-            $table->timestamps();
-            $table->unique(['building_id', 'name']);
-        });
+        if (! Schema::hasColumn('expense_categories', 'notes')) {
+            Schema::table('expense_categories', function (Blueprint $table) {
+                $table->text('notes')->nullable()->after('name');
+            });
+        }
+
+        if (! Schema::hasColumn('expense_categories', 'is_active')) {
+            Schema::table('expense_categories', function (Blueprint $table) {
+                $table->boolean('is_active')->default(false)->after('notes');
+            });
+        }
     }
 
     private function ensureDefaultCategories(Building $building): void
@@ -95,6 +118,8 @@ class ExpenseCategoryController extends BaseApiController
         foreach ($this->defaultCategories as $index => $name) {
             $building->expenseCategories()->create([
                 'name' => $name,
+                'notes' => null,
+                'is_active' => false,
                 'sort_order' => ($index + 1) * 10,
             ]);
         }
