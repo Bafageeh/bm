@@ -25,19 +25,20 @@ jobs:
             API="$ROOT/bm-api"
             MOBILE="$ROOT/bm-mobile"
 
-            cd "$ROOT"
-            git fetch origin main
+            RAW_BASE="https://raw.githubusercontent.com/Bafageeh/bm/main"
 
             sync_file() {
               rel="$1"
               tmp="/tmp/bm-sync-$(echo "$rel" | tr '/.' '__')"
-              git show "origin/main:$rel" > "$tmp"
+              curl -fsSL "$RAW_BASE/$rel" -o "$tmp"
               install -D -o pmsa -g pmsa -m 0644 "$tmp" "$ROOT/$rel"
             }
 
             sync_file bm-api/app/Models/PushToken.php
             sync_file bm-api/app/Models/ExpenseNotificationEvent.php
+            sync_file bm-api/app/Models/UserNotification.php
             sync_file bm-api/app/Http/Controllers/Api/PushTokenController.php
+            sync_file bm-api/app/Http/Controllers/Api/UserNotificationController.php
             sync_file bm-api/app/Services/ExpenseNotificationService.php
             sync_file bm-api/app/Http/Controllers/Api/ExpenseController.php
             sync_file bm-api/app/Http/Controllers/Api/ExpenseCategoryController.php
@@ -45,12 +46,15 @@ jobs:
             sync_file bm-api/routes/console.php
             sync_file bm-api/database/migrations/2026_09_23_203000_create_push_tokens_table.php
             sync_file bm-api/database/migrations/2026_09_23_203100_create_expense_notification_events_table.php
+            sync_file bm-api/database/migrations/2026_09_23_204000_create_user_notifications_table.php
             sync_file bm-mobile/App.js
             sync_file bm-mobile/app.json
 
             php -l "$API/app/Models/PushToken.php"
             php -l "$API/app/Models/ExpenseNotificationEvent.php"
+            php -l "$API/app/Models/UserNotification.php"
             php -l "$API/app/Http/Controllers/Api/PushTokenController.php"
+            php -l "$API/app/Http/Controllers/Api/UserNotificationController.php"
             php -l "$API/app/Services/ExpenseNotificationService.php"
             php -l "$API/app/Http/Controllers/Api/ExpenseController.php"
             php -l "$API/app/Http/Controllers/Api/ExpenseCategoryController.php"
@@ -61,8 +65,10 @@ jobs:
             cd "$API"
             runuser -u pmsa -- php artisan migrate --path=database/migrations/2026_09_23_203000_create_push_tokens_table.php --force
             runuser -u pmsa -- php artisan migrate --path=database/migrations/2026_09_23_203100_create_expense_notification_events_table.php --force
+            runuser -u pmsa -- php artisan migrate --path=database/migrations/2026_09_23_204000_create_user_notifications_table.php --force
             runuser -u pmsa -- php artisan optimize:clear
             runuser -u pmsa -- php artisan route:list | grep -q "push-tokens"
+            runuser -u pmsa -- php artisan route:list | grep -q "notifications/read-all"
             runuser -u pmsa -- php artisan list | grep -q "bm:send-expense-notifications"
             runuser -u pmsa -- php artisan bm:send-expense-notifications
 
