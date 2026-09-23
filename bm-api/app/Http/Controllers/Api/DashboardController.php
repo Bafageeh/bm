@@ -12,11 +12,30 @@ class DashboardController extends BaseApiController
         $this->assertCanAccessBuilding($request, $building);
 
         $stats = $this->buildingStats($building);
-        $owners = $building->owners()
-            ->with(['apartments', 'payments'])
+        $ownerModels = $building->owners()
+            ->with(['apartments', 'payments', 'user'])
             ->orderBy('name')
+            ->get();
+        $owners = $ownerModels
+            ->map(fn ($owner) => $this->ownerSummary($building, $owner))
+            ->values();
+        $ownersById = $owners->keyBy('id');
+
+        $apartments = $building->apartments()
+            ->orderByRaw('CAST(number AS UNSIGNED), number')
             ->get()
-            ->map(fn ($owner) => $this->ownerSummary($building, $owner));
+            ->map(function ($apartment) use ($ownersById) {
+                return [
+                    'id' => $apartment->id,
+                    'number' => $apartment->number,
+                    'floor' => $apartment->floor,
+                    'status' => $apartment->status,
+                    'notes' => $apartment->notes,
+                    'owner_id' => $apartment->owner_id,
+                    'owner' => $apartment->owner_id ? $ownersById->get($apartment->owner_id) : null,
+                ];
+            })
+            ->values();
 
         return [
             'building' => [
@@ -28,6 +47,7 @@ class DashboardController extends BaseApiController
             ],
             'stats' => $stats,
             'owners' => $owners,
+            'apartments' => $apartments,
             'latest_expenses' => $building->expenses()->latest('expense_date')->limit(5)->get(),
             'latest_payments' => $building->payments()->with('owner:id,name')->latest('payment_date')->limit(5)->get(),
         ];
