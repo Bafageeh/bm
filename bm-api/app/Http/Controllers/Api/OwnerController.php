@@ -123,18 +123,27 @@ class OwnerController extends BaseApiController
         }
 
         $currentOwner = $apartment->owner;
+        $matchedOwner = $currentOwner;
+
+        if (! $matchedOwner) {
+            $matchedOwner = Owner::query()
+                ->where('building_id', $building->id)
+                ->where('national_id', $data['national_id'])
+                ->first();
+        }
+
         $this->assertUniqueOwnerIdentity(
             $data['national_id'],
-            $currentOwner?->id,
-            $currentOwner?->user_id
+            $matchedOwner?->id,
+            $matchedOwner?->user_id
         );
         $login = $this->ownerLogin($data);
 
-        $owner = DB::transaction(function () use ($building, $apartment, $currentOwner, $data, $login) {
-            $user = $this->findOrCreateOwnerUser($data, $login, $currentOwner?->user_id);
+        $owner = DB::transaction(function () use ($building, $apartment, $matchedOwner, $data, $login) {
+            $user = $this->findOrCreateOwnerUser($data, $login, $matchedOwner?->user_id);
 
-            if ($currentOwner) {
-                $currentOwner->update([
+            if ($matchedOwner) {
+                $matchedOwner->update([
                     'user_id' => $user->id,
                     'name' => $data['name'],
                     'national_id' => $data['national_id'],
@@ -143,7 +152,7 @@ class OwnerController extends BaseApiController
                     'notes' => $data['notes'],
                     'status' => 'active',
                 ]);
-                $owner = $currentOwner;
+                $owner = $matchedOwner;
             } else {
                 $owner = Owner::create([
                     'building_id' => $building->id,
@@ -155,7 +164,9 @@ class OwnerController extends BaseApiController
                     'notes' => $data['notes'],
                     'status' => 'active',
                 ]);
+            }
 
+            if ((int) $apartment->owner_id !== (int) $owner->id) {
                 $apartment->update(['owner_id' => $owner->id]);
             }
 
