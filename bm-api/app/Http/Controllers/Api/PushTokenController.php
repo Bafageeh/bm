@@ -11,7 +11,7 @@ class PushTokenController extends BaseApiController
     public function store(Request $request)
     {
         $data = $request->validate([
-            'token' => ['required', 'string', 'max:500'],
+            'token' => ['required', 'string', 'max:255'],
             'platform' => ['nullable', 'string', Rule::in(['android', 'ios'])],
         ]);
 
@@ -30,7 +30,7 @@ class PushTokenController extends BaseApiController
     public function destroy(Request $request)
     {
         $data = $request->validate([
-            'token' => ['required', 'string', 'max:500'],
+            'token' => ['required', 'string', 'max:255'],
         ]);
 
         PushToken::where('user_id', $request->user()->id)
