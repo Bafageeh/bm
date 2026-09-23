@@ -17,8 +17,6 @@ class ExpenseCategoryController extends BaseApiController
     {
         $this->ensureTableExists();
         $this->assertCanAccessBuilding($request, $building);
-        $this->ensureDefaultCategories($building);
-
         return [
             'data' => $building->expenseCategories()
                 ->orderBy('sort_order')
@@ -35,12 +33,18 @@ class ExpenseCategoryController extends BaseApiController
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100', Rule::unique('expense_categories')->where('building_id', $building->id)],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'base_type' => ['sometimes', 'boolean'],
         ]);
+
+        $isBaseType = (bool) ($data['base_type'] ?? false);
+        if ($isBaseType) {
+            abort_unless($request->user()?->isAdmin(), 403, 'إضافة الأنواع الأساسية متاحة للـ admin فقط.');
+        }
 
         $category = $building->expenseCategories()->create([
             'name' => trim($data['name']),
             'notes' => isset($data['notes']) ? trim((string) $data['notes']) : null,
-            'is_active' => true,
+            'is_active' => ! $isBaseType,
             'sort_order' => ((int) $building->expenseCategories()->max('sort_order')) + 10,
         ]);
 
