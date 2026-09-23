@@ -1,0 +1,32 @@
+name: Verify BM expense types live
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/verify-bm-expense-types-live.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify live files and schema
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 2m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            grep -q "ExpenseTypeFormModal" "$ROOT/bm-mobile/App.js"
+            grep -q "typeDropdownField" "$ROOT/bm-mobile/App.js"
+            grep -q "is_active" "$ROOT/bm-api/app/Http/Controllers/Api/ExpenseCategoryController.php"
+            grep -q "notes" "$ROOT/bm-api/app/Models/ExpenseCategory.php"
+            cd "$ROOT/bm-api"
+            php artisan migrate:status --path=database/migrations/2026_09_23_170000_add_notes_and_active_to_expense_categories.php | grep -q "Ran"
+            lsof -iTCP:8083 -sTCP:LISTEN
+            echo "BM expense types UI/API/schema verified live."
