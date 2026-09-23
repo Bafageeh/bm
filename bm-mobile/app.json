@@ -8,7 +8,9 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "bm",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "updates": {
       "enabled": true,
       "url": "https://bm.pm.sa/api/updates/manifest",
@@ -31,6 +33,12 @@
     },
     "extra": {
       "apiUrl": "https://bm.pm.sa/api"
-    }
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-secure-store",
+      "expo-status-bar"
+    ]
   }
 }
