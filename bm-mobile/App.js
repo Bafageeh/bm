@@ -505,6 +505,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
       visible={typeFormVisible}
       onClose={closeTypeForm}
       categories={categories}
+      activeCategoryNames={groupedExpenses.map((group) => group.category)}
       selection={typeSelection}
       onSelect={chooseType}
       notes={typeNotes}
@@ -575,13 +576,14 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
   </View>;
 }
 
-function ExpenseTypeFormModal({ visible, onClose, categories, selection, onSelect, notes, setNotes, newTypeName, setNewTypeName, onSave, loading }) {
+function ExpenseTypeFormModal({ visible, onClose, categories, activeCategoryNames = [], selection, onSelect, notes, setNotes, newTypeName, setNewTypeName, onSave, loading }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   useEffect(() => { if (!visible) setDropdownOpen(false); }, [visible]);
 
+  const activeNames = new Set(activeCategoryNames || []);
   const typeOptions = (categories || [])
-    .map((item) => ({ id: item?.id, name: item?.name || item, notes: item?.notes || '' }))
-    .filter((item) => item.name && item.name !== 'أخرى');
+    .map((item) => ({ id: item?.id, name: item?.name || item, notes: item?.notes || '', isActive: Boolean(item?.is_active) }))
+    .filter((item) => item.name && item.name !== 'أخرى' && !item.isActive && !activeNames.has(item.name));
   const selectedLabel = selection === '__other__' ? 'أخرى' : selection || 'اختر نوع الصرف';
 
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
