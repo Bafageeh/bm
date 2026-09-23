@@ -1,0 +1,37 @@
+name: Sync BM App live
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/sync-bm-app-live.yml"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync App.js to live BM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 3m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            APP="$ROOT/bm-mobile/App.js"
+            cd "$ROOT"
+            git fetch origin main
+            git show origin/main:bm-mobile/App.js > /tmp/bm-App.js.new
+            install -o pmsa -g pmsa -m 0644 /tmp/bm-App.js.new "$APP"
+            grep -q "openAddFromSelectedCategory" "$APP"
+            grep -q "categoryModalAddBtn" "$APP"
+            if grep -q "categoryQuickAddBtn" "$APP"; then
+              echo "Old row quick-add button still exists"
+              exit 1
+            fi
+            lsof -iTCP:8083 -sTCP:LISTEN
+            echo "Live App.js synced; category add button is inside the floating details modal."
