@@ -1,89 +1,48 @@
-name: Deploy BM
+name: Deploy BM Dev
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to server
+      - name: Deploy current BM source to server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.BM_SSH_HOST }}
           username: ${{ secrets.BM_SSH_USER }}
           key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
           port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 20m
           script: |
             set -e
-            cd /mnt/home-storage/home/pmsa/apps/bm
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            MOBILE="$ROOT/bm-mobile"
+
+            cd "$ROOT"
             git fetch origin main
             git reset --hard origin/main
 
-            if [ -d bm-api ] && [ -f bm-api/artisan ]; then
-              echo "Deploying Laravel API"
-              cd /mnt/home-storage/home/pmsa/apps/bm/bm-api
-              mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache storage/app/expo-updates
-              chown -R pmsa:pmsa storage bootstrap/cache || true
-              chmod -R ug+rwX storage bootstrap/cache || true
-              if [ -f composer.json ]; then
-                composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
-              fi
-              php artisan optimize:clear || true
-              echo "Skipping migrations: production database tables already exist"
-              php artisan optimize || true
+            chown -R pmsa:pmsa "$MOBILE"
+            mkdir -p /home/pmsa/apps/.cache /home/pmsa/apps/.tmp
+            chown -R pmsa:pmsa /home/pmsa/apps/.cache /home/pmsa/apps/.tmp
 
-              # Runtime 1.0.1 did not contain react-native-svg natively. Never serve
-              # the new SVG UI bundle to that binary.
-              rm -rf storage/app/expo-updates/1.0.1
-            fi
+            runuser -u pmsa -- bash -lc "cd '$MOBILE' && npm install --legacy-peer-deps"
 
-            cd /mnt/home-storage/home/pmsa/apps/bm/bm-mobile
-            npm install --legacy-peer-deps
-            npm run patch-ui
+            rm -rf /home/pmsa/apps/.tmp/bm-deploy-check
+            runuser -u pmsa -- bash -lc "cd '$MOBILE' && EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo export --platform android --output-dir /home/pmsa/apps/.tmp/bm-deploy-check"
 
-            RUNTIME_VERSION="$(node -p "require('./app.json').expo.runtimeVersion")"
-            echo "Current runtime: ${RUNTIME_VERSION}"
+            lsof -ti:8083 | xargs -r kill -9 || true
+            rm -f /home/pmsa/apps/bm-expo-8083.log
 
-            if [ "$RUNTIME_VERSION" = "1.0.2" ]; then
-              echo "Publishing self-hosted OTA update"
-              rm -rf update-dist
-              EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo export --platform android --output-dir update-dist
-              EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo config --type public --json > update-dist/expoConfig.json
-              test -f update-dist/metadata.json
+            runuser -u pmsa -- bash -lc "cd '$MOBILE' && BROWSER=none EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=pm.sa XDG_CACHE_HOME=/home/pmsa/apps/.cache TMPDIR=/home/pmsa/apps/.tmp TMP=/home/pmsa/apps/.tmp TEMP=/home/pmsa/apps/.tmp nohup npx expo start --clear --go --host lan --port 8083 > /home/pmsa/apps/bm-expo-8083.log 2>&1 < /dev/null &"
 
-              RELEASE_ID="$(date +%s)"
-              UPDATE_DEST="/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates/${RUNTIME_VERSION}/${RELEASE_ID}"
-              mkdir -p "$UPDATE_DEST"
-              cp -a update-dist/. "$UPDATE_DEST/"
-              chown -R pmsa:pmsa "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates" || true
-              chmod -R ug+rwX "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates" || true
-
-              # Keep the latest 10 OTA releases for this runtime.
-              ls -1dt "/mnt/home-storage/home/pmsa/apps/bm/bm-api/storage/app/expo-updates/${RUNTIME_VERSION}"/* 2>/dev/null | tail -n +11 | xargs -r rm -rf
-
-              echo "Verifying OTA manifest endpoint"
-              curl --fail --silent --show-error --max-time 20 \
-                -H "expo-platform: android" \
-                -H "expo-runtime-version: ${RUNTIME_VERSION}" \
-                -H "expo-protocol-version: 1" \
-                "https://bm.pm.sa/api/updates/manifest" \
-                -o /tmp/bm-ota-manifest-response
-              test -s /tmp/bm-ota-manifest-response
-            else
-              echo "Skipping OTA publish until SVG-capable runtime 1.0.2 is active."
-            fi
-
-            lsof -ti:8084 | xargs -r kill -9 || true
-
-            BROWSER=none EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=bm.pm.sa \
-            XDG_CACHE_HOME=/home/pmsa/apps/.cache \
-            TMPDIR=/home/pmsa/apps/.tmp \
-            TMP=/home/pmsa/apps/.tmp \
-            TEMP=/home/pmsa/apps/.tmp \
-            nohup npx expo start --clear --go --host lan --port 8084 \
-            > /home/pmsa/apps/bm-expo-8084.log 2>&1 &
-
-            sleep 3
-            lsof -iTCP:8084 -sTCP:LISTEN || true
-            exit 0
+            sleep 6
+            lsof -iTCP:8083 -sTCP:LISTEN
+            curl --fail --silent --show-error --max-time 15 -H "expo-platform: android" -H "expo-protocol-version: 0" http://127.0.0.1:8083/ > /tmp/bm-expo-manifest.json
+            grep -q '"sdkVersion":"57.0.0"' /tmp/bm-expo-manifest.json
+            echo "BM SDK 57 is running on port 8083."
