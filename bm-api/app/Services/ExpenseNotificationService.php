@@ -6,6 +6,7 @@ use App\Models\Building;
 use App\Models\ExpenseNotificationEvent;
 use App\Models\PushToken;
 use App\Models\User;
+use App\Models\UserNotification;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -64,6 +65,27 @@ class ExpenseNotificationService
                     ->pluck('user_id')
                     ->unique()
                     ->values();
+
+                foreach ($ownerUserIds as $ownerUserId) {
+                    UserNotification::updateOrCreate(
+                        [
+                            'user_id' => $ownerUserId,
+                            'source_type' => 'expense_notification_event',
+                            'source_id' => $event->id,
+                        ],
+                        [
+                            'building_id' => $building->id,
+                            'type' => 'expense_update',
+                            'title' => $event->title,
+                            'body' => $event->body,
+                            'data' => [
+                                'building_id' => $building->id,
+                                'tab' => 'expenses',
+                                'scheduled_for' => optional($event->scheduled_for)->toIso8601String(),
+                            ],
+                        ]
+                    );
+                }
 
                 $tokens = PushToken::query()
                     ->whereIn('user_id', $ownerUserIds)
