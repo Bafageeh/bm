@@ -563,6 +563,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
       categories={options}
       category={editCategory}
       setCategory={setEditCategory}
+      categoryLocked
       amount={editAmount}
       setAmount={setEditAmount}
       dateValue={editDate}
