@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Building;
 use App\Models\Expense;
+use App\Services\ExpenseNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -40,7 +41,15 @@ class ExpenseController extends BaseApiController
             return $expense;
         });
 
-        return response()->json(['data' => $this->freshExpense($expense)], 201);
+        $freshExpense = $this->freshExpense($expense);
+        app(ExpenseNotificationService::class)->queueForManager(
+            $building,
+            $request->user(),
+            'expense_created',
+            'تمت إضافة مصروف من نوع '.$freshExpense->category.' بقيمة '.number_format((float) $freshExpense->amount, 2).' ريال.'
+        );
+
+        return response()->json(['data' => $freshExpense], 201);
     }
 
     public function update(Request $request, Building $building, Expense $expense)
@@ -58,7 +67,15 @@ class ExpenseController extends BaseApiController
             $this->syncTargetOwners($expense, $ownerIds);
         });
 
-        return ['data' => $this->freshExpense($expense)];
+        $freshExpense = $this->freshExpense($expense);
+        app(ExpenseNotificationService::class)->queueForManager(
+            $building,
+            $request->user(),
+            'expense_updated',
+            'تم تعديل مصروف من نوع '.$freshExpense->category.' بقيمة '.number_format((float) $freshExpense->amount, 2).' ريال.'
+        );
+
+        return ['data' => $freshExpense];
     }
 
     public function destroy(Request $request, Building $building, Expense $expense)
