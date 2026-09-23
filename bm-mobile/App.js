@@ -269,8 +269,68 @@ function Field({ label, value, onChangeText, placeholder, keyboardType = 'defaul
 function PrimaryButton({ title, icon, onPress, loading, variant = 'primary' }) {
   return <Pressable disabled={loading} onPress={onPress} style={({ pressed }) => [styles.button, styles[`button_${variant}`], pressed && styles.pressed]}>{loading ? <ActivityIndicator color={variant === 'light' ? '#0f766e' : '#fff'} /> : <Ionicons name={icon} size={20} color={variant === 'light' ? '#0f766e' : '#fff'} />}<Text style={[styles.buttonText, variant === 'light' && styles.buttonTextLight]}>{title}</Text></Pressable>;
 }
-function Header({ title, subtitle, onLogout, onBack }) {
-  return <View style={styles.header}><View style={styles.headerActions}>{onBack ? <HeaderIconButton icon="arrow-right" color="#0f766e" label="رجوع" onPress={onBack} /> : null}<HeaderIconButton icon="bell-ring-outline" color="#7c3aed" label="تنبيه" onPress={() => notifyLocal('التنبيهات جاهزة', 'تم تفعيل مكتبة التنبيهات لاستخدامها مستقبلاً.')} />{onLogout ? <HeaderIconButton icon="logout-variant" color="#ef4444" label="خروج" onPress={onLogout} /> : null}</View><View style={styles.flex1}><Text style={styles.headerTitle}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}</View></View>;
+function Header({ title, subtitle, onLogout, onBack, token }) {
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+
+  const openNotifications = async () => {
+    if (!token) return notifyLocal('التنبيهات', 'سجّل الدخول لعرض التنبيهات.');
+    setNotificationsVisible(true);
+    setNotificationsLoading(true);
+    try {
+      const data = await request('/notifications', {}, token);
+      setNotifications(data?.data || []);
+      if (Number(data?.unread_count || 0) > 0) {
+        await request('/notifications/read-all', { method: 'POST' }, token);
+      }
+    } catch (error) {
+      Alert.alert('تعذر تحميل التنبيهات', error.message);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  return <>
+    <View style={styles.header}>
+      <View style={styles.headerActions}>
+        {onBack ? <HeaderIconButton icon="arrow-right" color="#0f766e" label="رجوع" onPress={onBack} /> : null}
+        <HeaderIconButton icon="bell-ring-outline" color="#7c3aed" label="تنبيه" onPress={openNotifications} />
+        {onLogout ? <HeaderIconButton icon="logout-variant" color="#ef4444" label="خروج" onPress={onLogout} /> : null}
+      </View>
+      <View style={styles.flex1}>
+        <Text style={styles.headerTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
+      </View>
+    </View>
+
+    <Modal visible={notificationsVisible} transparent animationType="fade" onRequestClose={() => setNotificationsVisible(false)}>
+      <View style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setNotificationsVisible(false)} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={() => setNotificationsVisible(false)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>التنبيهات</Text>
+              <Text style={styles.ownerMeta}>آخر تنبيهات الحساب</Text>
+            </View>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            {notificationsLoading ? <ActivityIndicator color="#0f766e" size="large" /> : null}
+            {!notificationsLoading && notifications.length === 0 ? <EmptyState icon="notifications-outline" title="لا توجد تنبيهات" text="ستظهر هنا تنبيهات المصروفات الجديدة والتعديلات." /> : null}
+            {notifications.map((item) => <View key={item.id} style={styles.notificationCard}>
+              <View style={styles.notificationIcon}><Ionicons name="bell-ring-outline" size={20} color="#7c3aed" /></View>
+              <View style={styles.flex1}>
+                <Text style={styles.notificationTitle}>{item.title}</Text>
+                <Text style={styles.notificationBody}>{item.body}</Text>
+                <Text style={styles.notificationDate}>{item.created_at ? new Date(item.created_at).toLocaleString('ar-SA') : ''}</Text>
+              </View>
+            </View>)}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  </>;
 }
 function HeaderIconButton({ icon, color, label, onPress }) {
   return <Pressable onPress={onPress} accessibilityLabel={label} style={({ pressed }) => [styles.circleBtn, pressed && styles.pressed]}><MaterialCommunityIcons name={icon} size={23} color={color} /><Text style={styles.circleBtnLabel}>{label}</Text></Pressable>;
@@ -801,7 +861,7 @@ function useAutomaticOtaUpdates() {
 }
 
 function LoadingScreen() { return <View style={styles.loading}><ActivityIndicator color="#0f766e" size="large" /><Text style={styles.loadingText}>جاري التحميل...</Text></View>; }
-function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async () => { if (!selectedBuilding) return; setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = dashboard?.owners || []; return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} owners={owners} reload={reload} setTab={setTab} setInitialPaymentOwnerId={setInitialPaymentOwnerId} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'payments'} icon="wallet-outline" title="الدفعات" onPress={() => setTab('payments')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
+function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async () => { if (!selectedBuilding) return; setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = dashboard?.owners || []; return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} owners={owners} reload={reload} setTab={setTab} setInitialPaymentOwnerId={setInitialPaymentOwnerId} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'payments'} icon="wallet-outline" title="الدفعات" onPress={() => setTab('payments')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
 function TabButton({ active, icon, title, onPress }) { return <Pressable onPress={onPress} style={styles.tabBtn}><Ionicons name={icon} size={21} color={active ? '#0f766e' : '#94a3b8'} /><Text style={[styles.tabText, active && styles.tabTextActive]}>{title}</Text></Pressable>; }
 export default function App() {
   useAutomaticOtaUpdates();
@@ -858,6 +918,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' }, screenWrapper: { flex: 1, backgroundColor: '#f8fafc' }, loginContainer: { flex: 1, backgroundColor: '#ecfdf5' }, loginContent: { flex: 1, padding: 22, justifyContent: 'center' }, logoCircle: { width: 98, height: 98, borderRadius: 49, backgroundColor: '#fff', alignSelf: 'center', justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 }, appName: { fontSize: 27, fontWeight: '900', textAlign: 'center', color: '#0f172a' }, subtitle: { fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8, lineHeight: 23 }, loginCard: { backgroundColor: '#fff', borderRadius: 24, padding: 18, marginTop: 24, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
+  notificationCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 18, padding: 12, marginBottom: 9, flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 }, notificationIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: '#f5f3ff', alignItems: 'center', justifyContent: 'center' }, notificationTitle: { color: '#0f172a', fontSize: 14, fontWeight: '900', textAlign: 'right' }, notificationBody: { color: '#475569', fontSize: 13, lineHeight: 21, textAlign: 'right', marginTop: 3 }, notificationDate: { color: '#94a3b8', fontSize: 10, textAlign: 'right', marginTop: 5 },
   field: { marginBottom: 12 }, requiredHint: { color: '#ef4444', fontSize: 11, fontWeight: '800', textAlign: 'right', marginTop: 4 }, label: { color: '#334155', fontSize: 13, fontWeight: '800', textAlign: 'right', marginBottom: 6 }, input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0f172a' }, dateInput: { minHeight: 54, justifyContent: 'center', flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }, dateInputText: { flex: 1, textAlign: 'right', color: '#0f172a', fontWeight: '900' }, datePlaceholder: { color: '#94a3b8' }, textarea: { minHeight: 82, textAlignVertical: 'top' }, button: { height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 8, marginTop: 8 }, button_primary: { backgroundColor: '#0f766e' }, button_light: { backgroundColor: '#ecfdf5' }, buttonText: { color: '#fff', fontWeight: '900', fontSize: 15 }, buttonTextLight: { color: '#0f766e' }, pressed: { opacity: 0.75 },
   header: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', gap: 10 }, headerActions: { flexDirection: 'row', gap: 8 }, circleBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbeafe', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 10, elevation: 3 }, circleBtnLabel: { fontSize: 9, color: '#64748b', fontWeight: '900', marginTop: 1 }, headerTitle: { fontSize: 20, fontWeight: '900', color: '#0f172a', textAlign: 'right' }, headerSubtitle: { fontSize: 12, color: '#64748b', textAlign: 'right', marginTop: 2 }, flex1: { flex: 1 },
   listContent: { padding: 16, gap: 12 }, buildingCard: { backgroundColor: '#fff', padding: 16, borderRadius: 22, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, shadowColor: '#0f172a', shadowOpacity: 0.04, shadowRadius: 12, elevation: 2 }, buildingIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: '#ecfdf5', justifyContent: 'center', alignItems: 'center' }, cardTitle: { fontWeight: '900', color: '#0f172a', fontSize: 15, textAlign: 'right' }, cardSub: { color: '#64748b', fontSize: 12, marginTop: 3, textAlign: 'right' },
