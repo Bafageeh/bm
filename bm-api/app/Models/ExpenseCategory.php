@@ -10,12 +10,15 @@ class ExpenseCategory extends Model
     protected $fillable = [
         'building_id',
         'name',
+        'notes',
+        'is_active',
         'sort_order',
     ];
 
     protected function casts(): array
     {
         return [
+            'is_active' => 'boolean',
             'sort_order' => 'integer',
         ];
     }
