@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ManagerRegistrationController;
 use App\Http\Controllers\Api\OwnerController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\PushTokenController;
 use App\Http\Controllers\Api\UpdateController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,6 +24,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/change-'.'password', [AuthController::class, 'changePassword']);
+
+    Route::post('/push-tokens', [PushTokenController::class, 'store']);
+    Route::delete('/push-tokens', [PushTokenController::class, 'destroy']);
 
     Route::get('/buildings', [BuildingController::class, 'index']);
     Route::post('/buildings', [BuildingController::class, 'store']);
