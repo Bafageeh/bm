@@ -40,7 +40,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/owner/dashboard', [DashboardController::class, 'owner']);
 
     Route::get('/buildings/{building}/owners', [OwnerController::class, 'index']);
-    Route::put('/buildings/{building}/owners/{owner}', [OwnerController::class, 'update']);
     Route::put('/buildings/{building}/apartments/{apartment}/owner', [OwnerController::class, 'updateApartment']);
 
     Route::get('/buildings/{building}/expenses', [ExpenseController::class, 'index']);
