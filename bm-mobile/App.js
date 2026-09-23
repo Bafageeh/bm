@@ -344,6 +344,8 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
     return Object.values(groups).sort((a, b) => (b.total - a.total) || a.category.localeCompare(b.category, 'ar'));
   }, [expenses, categories]);
 
+  const totalExpensesAmount = useMemo(() => groupedExpenses.reduce((sum, group) => sum + Number(group.total || 0), 0), [groupedExpenses]);
+
   const resetAddExpenseForm = () => {
     setAmount('');
     setExpenseDate(todayDate());
@@ -486,7 +488,17 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
   return <View style={styles.screenWrapper}>
     <ScrollView contentContainerStyle={[styles.screenContent, styles.expensesScreenContent]}>
       <ScreenCode code="#S-004" style={styles.expensesScreenCodeBadge} />
-      {groupedExpenses.length === 0 ? <EmptyState icon="receipt-outline" title="لا توجد أنواع صرف" text="اضغط زر الإضافة لإضافة نوع صرف للمبنى." /> : null}
+      <View style={styles.expenseSummaryCard}>
+        <View style={styles.expenseSummaryMain}>
+          <Text style={styles.expenseSummaryLabel}>إجمالي المصروفات</Text>
+          <Text style={styles.expenseSummaryAmount}>{money(totalExpensesAmount)}</Text>
+          <Text style={styles.expenseSummaryMeta}>عدد أنواع الصرف: {groupedExpenses.length}</Text>
+        </View>
+        <Pressable accessibilityLabel="إضافة نوع صرف" onPress={openTypeForm} style={({ pressed }) => [styles.expenseSummaryAddBtn, pressed && styles.pressed]}>
+          <Ionicons name="add" size={28} color="#fff" />
+        </Pressable>
+      </View>
+      {groupedExpenses.length === 0 ? <EmptyState icon="receipt-outline" title="لا توجد أنواع صرف" text="اضغط زر + لإضافة نوع صرف للمبنى." /> : null}
       {groupedExpenses.map((group) => <Pressable key={group.category} accessibilityLabel={`عرض مصروفات ${group.category}`} onPress={() => { setSelectedExpenseCategory(group); setExpenseCategoryDetailsVisible(true); }} style={({ pressed }) => [styles.rowCard, pressed && styles.pressed]}>
         <View style={styles.rowIcon}><Ionicons name="folder-open-outline" size={20} color="#f97316" /></View>
         <View style={styles.flex1}>
@@ -496,10 +508,6 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
         <Text style={styles.amountText}>{money(group.total)}</Text>
       </Pressable>)}
     </ScrollView>
-
-    <Pressable onPress={openTypeForm} style={({ pressed }) => [styles.ownerFloatingAdd, pressed && styles.pressed]}>
-      <Ionicons name="add" size={29} color="#fff" />
-    </Pressable>
 
     <ExpenseTypeFormModal
       visible={typeFormVisible}
@@ -768,6 +776,7 @@ const styles = StyleSheet.create({
   expenseIconActions: { flexDirection: 'row', alignItems: 'center', gap: 6 }, expenseIconBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' }, expenseIconBtnMuted: { backgroundColor: '#fff' }, expenseEditIconBtn: { backgroundColor: '#ecfdf5', borderColor: '#d1fae5' }, expenseDeleteIconBtn: { backgroundColor: '#fef2f2', borderColor: '#fee2e2' },
   categoryModalAddBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 6, elevation: 3 },
   lockedCategoryField: { minHeight: 54, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 16, paddingHorizontal: 14, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginBottom: 12 }, lockedCategoryText: { color: '#0f766e', fontWeight: '900', fontSize: 15, textAlign: 'right' },
+  expenseSummaryCard: { backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#dbe5ea', padding: 16, marginBottom: 14, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, shadowColor: '#0f172a', shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 }, expenseSummaryMain: { flex: 1, alignItems: 'flex-end' }, expenseSummaryLabel: { color: '#64748b', fontSize: 12, fontWeight: '800', textAlign: 'right' }, expenseSummaryAmount: { color: '#0f172a', fontSize: 23, fontWeight: '900', textAlign: 'right', marginTop: 4 }, expenseSummaryMeta: { color: '#94a3b8', fontSize: 11, fontWeight: '700', textAlign: 'right', marginTop: 4 }, expenseSummaryAddBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
   categoryTypeNote: { color: '#64748b', fontSize: 11, marginTop: 4, textAlign: 'right' }, typeDropdownField: { minHeight: 54, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, paddingHorizontal: 14, flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 }, typeDropdownText: { flex: 1, color: '#0f172a', fontWeight: '900', fontSize: 15, textAlign: 'right' }, typeDropdownMenu: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, overflow: 'hidden', marginBottom: 12 }, typeDropdownItem: { minHeight: 48, paddingHorizontal: 14, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }, typeDropdownItemActive: { backgroundColor: '#ecfdf5' }, typeDropdownItemText: { flex: 1, color: '#334155', fontWeight: '800', textAlign: 'right' }, typeDropdownItemTextActive: { color: '#0f766e' }, typeDropdownOther: { borderBottomWidth: 0, backgroundColor: '#f8fafc' },
   manageOwnerCard: { marginBottom: 7, backgroundColor: '#fff', borderRadius: 18, padding: 6, borderWidth: 1, borderColor: '#e2e8f0' }, manageOwnerCardWithMenu: { position: 'relative', overflow: 'visible' }, ownerCardMenuButton: { position: 'absolute', top: 11, left: 12, width: 42, height: 42, borderRadius: 21, backgroundColor: '#ecfeff', borderWidth: 1, borderColor: '#a7f3d0', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 10, elevation: 3, zIndex: 20 }, ownerCardMenu: { position: 'absolute', top: 54, left: 12, width: 132, backgroundColor: '#fff', borderRadius: 16, paddingVertical: 6, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#0f172a', shadowOpacity: 0.14, shadowRadius: 14, elevation: 8, zIndex: 30 }, ownerCardMenuItem: { minHeight: 40, paddingHorizontal: 12, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }, ownerCardMenuText: { color: '#0f172a', fontWeight: '900', fontSize: 13, textAlign: 'right' }, ownerMetaRow: { flexDirection: 'row-reverse', gap: 6, flexWrap: 'wrap', paddingHorizontal: 3, paddingTop: 4 }, ownerMeta: { fontSize: 10, color: '#64748b', textAlign: 'right' }, actionsRow: { flexDirection: 'row-reverse', gap: 6, marginTop: 6 }, actionBtn: { flex: 1, height: 33, borderRadius: 11, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 5 }, deleteBtn: { backgroundColor: '#fef2f2' }, actionText: { color: '#0f766e', fontWeight: '900', fontSize: 12 }, deleteText: { color: '#ef4444' }, ownerFloatingAdd: { position: 'absolute', top: 8, left: 16, width: 46, height: 46, borderRadius: 23, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.18, shadowRadius: 11, elevation: 8, zIndex: 10 },
   modalRoot: { flex: 1, justifyContent: 'flex-start', paddingTop: Platform.OS === 'ios' ? 70 : 44, paddingHorizontal: 14 }, modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.42)' }, floatingFormCard: { maxHeight: '86%', backgroundColor: '#fff', borderRadius: 26, padding: 14, shadowColor: '#0f172a', shadowOpacity: 0.18, shadowRadius: 18, elevation: 10 }, floatingFormHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingBottom: 12, marginBottom: 8 }, closeFloatingBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }, floatingFormTitle: { color: '#0f172a', fontWeight: '900', fontSize: 18, textAlign: 'right' }, floatingFormBody: { paddingTop: 4, paddingBottom: 8 },
