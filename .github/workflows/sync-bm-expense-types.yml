@@ -5,6 +5,10 @@ on:
     branches:
       - main
     paths:
+      - "bm-mobile/App.js"
+      - "bm-api/app/Http/Controllers/Api/ExpenseCategoryController.php"
+      - "bm-api/app/Models/ExpenseCategory.php"
+      - "bm-api/database/migrations/2026_09_23_170000_add_notes_and_active_to_expense_categories.php"
       - ".github/workflows/sync-bm-expense-types.yml"
 
 jobs:
@@ -51,6 +55,9 @@ jobs:
             grep -q "ExpenseTypeFormModal" "$MOBILE/App.js"
             grep -q "typeDropdownField" "$MOBILE/App.js"
             grep -q "is_active" "$API/app/Http/Controllers/Api/ExpenseCategoryController.php"
+            grep -q "base_type" "$API/app/Http/Controllers/Api/ExpenseCategoryController.php"
+            grep -q "activeCategoryNames" "$MOBILE/App.js"
+            grep -q "الأنواع الأساسية للصرف" "$MOBILE/App.js"
 
             rm -rf /home/pmsa/apps/.tmp/bm-expense-type-check
             runuser -u pmsa -- bash -lc "cd '$MOBILE' && EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo export --platform android --output-dir /home/pmsa/apps/.tmp/bm-expense-type-check >/tmp/bm-expense-type-check.log 2>&1"
