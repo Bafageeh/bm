@@ -1,0 +1,30 @@
+name: Verify BM quick add
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/verify-bm-quick-add.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify live BM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 2m
+          script: |
+            set -e
+            APP=/mnt/home-storage/home/pmsa/apps/bm/bm-mobile/App.js
+            grep -q "openAddExpenseForCategory" "$APP"
+            grep -q "categoryQuickAddBtn" "$APP"
+            lsof -iTCP:8083 -sTCP:LISTEN
+            curl --fail --silent --show-error --max-time 10 -H "expo-platform: android" -H "expo-protocol-version: 0" http://127.0.0.1:8083/ > /tmp/bm-live-check.json
+            grep -q '"sdkVersion":"57.0.0"' /tmp/bm-live-check.json
+            echo "BM quick-add is live on SDK 57 / port 8083."
