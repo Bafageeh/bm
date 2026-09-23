@@ -109,8 +109,29 @@ const MaterialCommunityIcons = DrawnIcon;
 
 const NOTIFICATION_CHANNEL_ID = 'bm-main-alerts';
 let NotificationsModule = null;
+let ExpoGoRuntime = null;
+
+function isRunningInExpoGo() {
+  if (ExpoGoRuntime !== null) return ExpoGoRuntime;
+  try {
+    const ConstantsModule = require('expo-constants');
+    const Constants = ConstantsModule?.default || ConstantsModule;
+    ExpoGoRuntime =
+      Constants?.appOwnership === 'expo' ||
+      Constants?.executionEnvironment === 'storeClient';
+  } catch (_) {
+    // The live project is normally opened through Expo Go while developing.
+    // If runtime detection is unavailable, do not load remote notifications in dev.
+    ExpoGoRuntime = typeof __DEV__ !== 'undefined' && __DEV__;
+  }
+  return ExpoGoRuntime;
+}
 
 function getNotificationsModule() {
+  // expo-notifications remote push support is intentionally unavailable in Expo Go
+  // (SDK 53+). Never require it there because the module throws before JS can recover.
+  if (isRunningInExpoGo()) return null;
+
   try {
     if (!NotificationsModule) {
       NotificationsModule = require('expo-notifications');
