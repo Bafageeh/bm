@@ -1,0 +1,70 @@
+name: Deploy BM apartment-managed owners
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "bm-mobile/App.js"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy apartment-managed owner flow
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 10m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            MOBILE="$ROOT/bm-mobile"
+            API="$ROOT/bm-api"
+            REF=refs/remotes/origin/apartment-managed-owners
+
+            cd "$ROOT"
+            git fetch origin "main:$REF"
+
+            git show "$REF:bm-mobile/App.js" > /tmp/bm-App-apartments.js
+            install -o pmsa -g pmsa -m 0644 /tmp/bm-App-apartments.js "$MOBILE/App.js"
+
+            for file in \
+              app/Http/Controllers/Api/BaseApiController.php \
+              app/Http/Controllers/Api/BuildingController.php \
+              app/Http/Controllers/Api/DashboardController.php \
+              app/Http/Controllers/Api/OwnerController.php \
+              routes/api.php
+            do
+              git show "$REF:bm-api/$file" > "/tmp/bm-$(basename "$file")"
+              install -o pmsa -g pmsa -m 0644 "/tmp/bm-$(basename "$file")" "$API/$file"
+            done
+
+            php -l "$API/app/Http/Controllers/Api/BaseApiController.php"
+            php -l "$API/app/Http/Controllers/Api/BuildingController.php"
+            php -l "$API/app/Http/Controllers/Api/DashboardController.php"
+            php -l "$API/app/Http/Controllers/Api/OwnerController.php"
+            php -l "$API/routes/api.php"
+
+            cd "$API"
+            php artisan optimize:clear
+            php artisan route:list --path=api/buildings | grep -q "apartments/{apartment}/owner"
+
+            grep -q "ApartmentOwnerCard" "$MOBILE/App.js"
+            grep -q "تعديل بيانات الشقة" "$MOBILE/App.js"
+
+            rm -rf /home/pmsa/apps/.tmp/bm-apartments-check
+            runuser -u pmsa -- bash -lc "cd '$MOBILE' && EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo export --platform android --output-dir /home/pmsa/apps/.tmp/bm-apartments-check >/tmp/bm-apartments-check.log 2>&1"
+            tail -n 20 /tmp/bm-apartments-check.log
+
+            lsof -ti:8083 | xargs -r kill -9 || true
+            rm -f /home/pmsa/apps/bm-expo-8083.log
+            runuser -u pmsa -- bash -lc "cd '$MOBILE' && BROWSER=none EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=pm.sa XDG_CACHE_HOME=/home/pmsa/apps/.cache TMPDIR=/home/pmsa/apps/.tmp TMP=/home/pmsa/apps/.tmp TEMP=/home/pmsa/apps/.tmp nohup npx expo start --clear --go --host lan --port 8083 > /home/pmsa/apps/bm-expo-8083.log 2>&1 < /dev/null &"
+
+            sleep 6
+            lsof -iTCP:8083 -sTCP:LISTEN
+            echo "BM apartment-managed owner flow is live."
