@@ -1,0 +1,86 @@
+name: Deploy BM scheduled expense alerts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-bm-expense-alerts.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy scheduled expense alerts
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 15m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+            MOBILE="$ROOT/bm-mobile"
+
+            cd "$ROOT"
+            git fetch origin main
+
+            sync_file() {
+              rel="$1"
+              tmp="/tmp/bm-sync-$(echo "$rel" | tr '/.' '__')"
+              git show "origin/main:$rel" > "$tmp"
+              install -D -o pmsa -g pmsa -m 0644 "$tmp" "$ROOT/$rel"
+            }
+
+            sync_file bm-api/app/Models/PushToken.php
+            sync_file bm-api/app/Models/ExpenseNotificationEvent.php
+            sync_file bm-api/app/Http/Controllers/Api/PushTokenController.php
+            sync_file bm-api/app/Services/ExpenseNotificationService.php
+            sync_file bm-api/app/Http/Controllers/Api/ExpenseController.php
+            sync_file bm-api/app/Http/Controllers/Api/ExpenseCategoryController.php
+            sync_file bm-api/routes/api.php
+            sync_file bm-api/routes/console.php
+            sync_file bm-api/database/migrations/2026_09_23_203000_create_push_tokens_table.php
+            sync_file bm-api/database/migrations/2026_09_23_203100_create_expense_notification_events_table.php
+            sync_file bm-mobile/App.js
+            sync_file bm-mobile/app.json
+
+            php -l "$API/app/Models/PushToken.php"
+            php -l "$API/app/Models/ExpenseNotificationEvent.php"
+            php -l "$API/app/Http/Controllers/Api/PushTokenController.php"
+            php -l "$API/app/Services/ExpenseNotificationService.php"
+            php -l "$API/app/Http/Controllers/Api/ExpenseController.php"
+            php -l "$API/app/Http/Controllers/Api/ExpenseCategoryController.php"
+            php -l "$API/routes/api.php"
+            php -l "$API/routes/console.php"
+
+            chown -R pmsa:pmsa "$API/storage" "$API/bootstrap/cache" "$MOBILE"
+            cd "$API"
+            runuser -u pmsa -- php artisan migrate --force
+            runuser -u pmsa -- php artisan optimize:clear
+            runuser -u pmsa -- php artisan route:list | grep -q "push-tokens"
+            runuser -u pmsa -- php artisan list | grep -q "bm:send-expense-notifications"
+            runuser -u pmsa -- php artisan bm:send-expense-notifications
+
+            PHP_BIN=$(command -v php)
+            RUNUSER_BIN=$(command -v runuser)
+            CRON_LINE="* * * * * cd $API && $RUNUSER_BIN -u pmsa -- $PHP_BIN artisan bm:send-expense-notifications >> $API/storage/logs/expense-notifications.log 2>&1"
+            (crontab -l 2>/dev/null | grep -v "bm:send-expense-notifications" || true; echo "$CRON_LINE") | crontab -
+            crontab -l | grep -q "bm:send-expense-notifications"
+
+            rm -rf /home/pmsa/apps/.tmp/bm-expense-alerts-check
+            runuser -u pmsa -- bash -lc "cd '$MOBILE' && EXPO_PUBLIC_API_URL=https://bm.pm.sa/api npx expo export --platform android --output-dir /home/pmsa/apps/.tmp/bm-expense-alerts-check >/tmp/bm-expense-alerts-check.log 2>&1"
+            tail -n 20 /tmp/bm-expense-alerts-check.log
+
+            lsof -ti:8083 | xargs -r kill -9 || true
+            rm -f /home/pmsa/apps/bm-expo-8083.log
+            runuser -u pmsa -- bash -lc "cd '$MOBILE' && BROWSER=none EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=pm.sa XDG_CACHE_HOME=/home/pmsa/apps/.cache TMPDIR=/home/pmsa/apps/.tmp TMP=/home/pmsa/apps/.tmp TEMP=/home/pmsa/apps/.tmp nohup npx expo start --clear --go --host lan --port 8083 > /home/pmsa/apps/bm-expo-8083.log 2>&1 < /dev/null &"
+
+            sleep 6
+            lsof -iTCP:8083 -sTCP:LISTEN
+            curl --fail --silent --show-error --max-time 15 -H "expo-platform: android" -H "expo-protocol-version: 0" http://127.0.0.1:8083/ > /tmp/bm-expense-alerts-manifest.json
+            grep -q '"sdkVersion":"57.0.0"' /tmp/bm-expense-alerts-manifest.json
+            echo "BM scheduled expense alerts deployed; sender cron runs every minute and releases due alerts at 09:00 Asia/Riyadh."
