@@ -821,7 +821,7 @@ function ExpenseCategoriesScreen({ token, buildingId, categories, reload, user }
 
 const emptyOwnerForm = { name: '', phone: '', national_id: '', email: '', notes: '' };
 
-function ApartmentOwnerCard({ apartment, onEdit }) {
+function ApartmentOwnerCard({ apartment, onEdit, onPayments }) {
   const owner = apartment?.owner;
   const isDue = owner?.status === 'due';
   const isSurplus = owner?.status === 'surplus';
@@ -854,11 +854,15 @@ function ApartmentOwnerCard({ apartment, onEdit }) {
         <Ionicons name="create-outline" size={18} color="#0f766e" />
         <Text style={styles.actionText}>تعديل بيانات الشقة</Text>
       </Pressable>
+      <Pressable style={styles.actionBtn} onPress={() => onPayments(apartment)}>
+        <Ionicons name="wallet-outline" size={18} color="#0f766e" />
+        <Text style={styles.actionText}>الدفعات</Text>
+      </Pressable>
     </View>
   </View>;
 }
 
-function OwnersScreen({ token, buildingId, apartments, reload }) {
+function OwnersScreen({ token, buildingId, apartments, reload, setTab, setInitialPaymentOwnerId }) {
   const [form, setForm] = useState(emptyOwnerForm);
   const [editingApartment, setEditingApartment] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -916,12 +920,22 @@ function OwnersScreen({ token, buildingId, apartments, reload }) {
     }
   };
 
+  const openPayments = (apartment) => {
+    const ownerId = apartment?.owner?.id || apartment?.owner_id;
+    if (!ownerId) {
+      Alert.alert('تنبيه', 'أدخل بيانات مالك الشقة أولًا');
+      return;
+    }
+    setInitialPaymentOwnerId?.(ownerId);
+    setTab?.('payments');
+  };
+
   return <View style={styles.screenWrapper}>
     <ScrollView contentContainerStyle={[styles.screenContent, styles.ownersScreenContent]}>
       <ScreenCode code="#S-002" />
       {apartmentRows.length === 0
         ? <EmptyState icon="business-outline" title="لا توجد شقق مجهزة" text="حدد عدد الشقق أولًا من إعدادات المبنى، وسيتم تجهيزها تلقائيًا." />
-        : apartmentRows.map((apartment) => <ApartmentOwnerCard key={apartment.id} apartment={apartment} onEdit={startEdit} />)}
+        : apartmentRows.map((apartment) => <ApartmentOwnerCard key={apartment.id} apartment={apartment} onEdit={startEdit} onPayments={openPayments} />)}
     </ScrollView>
 
     <Modal visible={ownerFormVisible} transparent animationType="fade" onRequestClose={resetForm}>
@@ -1011,7 +1025,7 @@ function useAutomaticOtaUpdates() {
 }
 
 function LoadingScreen() { return <View style={styles.loading}><ActivityIndicator color="#0f766e" size="large" /><Text style={styles.loadingText}>جاري التحميل...</Text></View>; }
-function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async () => { if (!selectedBuilding) return; setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} reload={reload} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'payments'} icon="wallet-outline" title="الدفعات" onPress={() => setTab('payments')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
+function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async () => { if (!selectedBuilding) return; setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} reload={reload} setTab={setTab} setInitialPaymentOwnerId={setInitialPaymentOwnerId} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'payments'} icon="wallet-outline" title="الدفعات" onPress={() => setTab('payments')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
 function TabButton({ active, icon, title, onPress }) { return <Pressable onPress={onPress} style={styles.tabBtn}><Ionicons name={icon} size={21} color={active ? '#0f766e' : '#94a3b8'} /><Text style={[styles.tabText, active && styles.tabTextActive]}>{title}</Text></Pressable>; }
 export default function App() {
   useAutomaticOtaUpdates();
