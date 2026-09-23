@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\Apartment;
 use App\Models\Building;
 use App\Models\Owner;
 use App\Models\User;
@@ -89,6 +90,94 @@ class OwnerController extends BaseApiController
 
         return response()->json([
             'data' => $this->ownerSummary($building, $owner->fresh(['apartments', 'payments', 'user'])),
+            'default_password' => '123456',
+        ]);
+    }
+
+    public function updateApartment(Request $request, Building $building, Apartment $apartment)
+    {
+        $this->assertManagerOrAdmin($request, $building);
+        $this->assertApartmentBelongsToBuilding($building, $apartment);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'national_id' => ['required', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'notes' => ['nullable', 'string'],
+        ], [
+            'name.required' => 'اسم المالك مطلوب.',
+            'national_id.required' => 'رقم الهوية أو اسم الدخول مطلوب.',
+            'email.email' => 'صيغة البريد الإلكتروني غير صحيحة.',
+        ]);
+
+        foreach (['name', 'national_id', 'phone', 'email', 'notes'] as $key) {
+            $value = trim((string) ($data[$key] ?? ''));
+            $data[$key] = $value !== '' ? $value : null;
+        }
+
+        if (! $data['national_id']) {
+            throw ValidationException::withMessages([
+                'national_id' => ['رقم هوية المالك مطلوب ويستخدم كاسم دخول.'],
+            ]);
+        }
+
+        $currentOwner = $apartment->owner;
+        $this->assertUniqueOwnerIdentity(
+            $data['national_id'],
+            $currentOwner?->id,
+            $currentOwner?->user_id
+        );
+        $login = $this->ownerLogin($data);
+
+        $owner = DB::transaction(function () use ($building, $apartment, $currentOwner, $data, $login) {
+            $user = $this->findOrCreateOwnerUser($data, $login, $currentOwner?->user_id);
+
+            if ($currentOwner) {
+                $currentOwner->update([
+                    'user_id' => $user->id,
+                    'name' => $data['name'],
+                    'national_id' => $data['national_id'],
+                    'phone' => $data['phone'],
+                    'email' => $data['email'],
+                    'notes' => $data['notes'],
+                    'status' => 'active',
+                ]);
+                $owner = $currentOwner;
+            } else {
+                $owner = Owner::create([
+                    'building_id' => $building->id,
+                    'user_id' => $user->id,
+                    'name' => $data['name'],
+                    'national_id' => $data['national_id'],
+                    'phone' => $data['phone'],
+                    'email' => $data['email'],
+                    'notes' => $data['notes'],
+                    'status' => 'active',
+                ]);
+
+                $apartment->update(['owner_id' => $owner->id]);
+            }
+
+            return $owner;
+        });
+
+        $apartment = $apartment->fresh(['owner.user']);
+
+        return response()->json([
+            'message' => 'تم حفظ بيانات الشقة والمالك.',
+            'data' => [
+                'id' => $apartment->id,
+                'number' => $apartment->number,
+                'floor' => $apartment->floor,
+                'status' => $apartment->status,
+                'notes' => $apartment->notes,
+                'owner_id' => $owner->id,
+                'owner' => $this->ownerSummary(
+                    $building,
+                    $owner->fresh(['apartments', 'payments', 'user'])
+                ),
+            ],
             'default_password' => '123456',
         ]);
     }
@@ -230,6 +319,13 @@ class OwnerController extends BaseApiController
                     'status' => 'active',
                 ]
             );
+        }
+    }
+
+    private function assertApartmentBelongsToBuilding(Building $building, Apartment $apartment): void
+    {
+        if ((int) $apartment->building_id !== (int) $building->id) {
+            abort(404, 'الشقة غير موجودة في هذا المبنى.');
         }
     }
 
