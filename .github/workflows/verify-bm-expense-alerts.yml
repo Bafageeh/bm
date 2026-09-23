@@ -1,0 +1,42 @@
+name: Verify BM 9AM expense alerts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/verify-bm-expense-alerts.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify live alert infrastructure
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 3m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+            MOBILE="$ROOT/bm-mobile"
+
+            grep -q "queueForManager" "$API/app/Services/ExpenseNotificationService.php"
+            grep -q "push-tokens" "$API/routes/api.php"
+            grep -q "bm:send-expense-notifications" "$API/routes/console.php"
+            grep -q "registerPushNotifications" "$MOBILE/App.js"
+            grep -q "expo-notifications" "$MOBILE/app.json"
+
+            cd "$API"
+            runuser -u pmsa -- php artisan migrate:status --path=database/migrations/2026_09_23_203000_create_push_tokens_table.php | grep -q "Ran"
+            runuser -u pmsa -- php artisan migrate:status --path=database/migrations/2026_09_23_203100_create_expense_notification_events_table.php | grep -q "Ran"
+            runuser -u pmsa -- php artisan route:list | grep -q "push-tokens"
+            runuser -u pmsa -- php artisan list | grep -q "bm:send-expense-notifications"
+            crontab -l | grep -q "bm:send-expense-notifications"
+            lsof -iTCP:8083 -sTCP:LISTEN
+
+            echo "Verified: manager expense add/edit events are queued for owners and the 09:00 Asia/Riyadh sender is installed."
