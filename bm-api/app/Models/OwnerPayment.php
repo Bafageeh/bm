@@ -10,6 +10,7 @@ class OwnerPayment extends Model
     protected $fillable = [
         'building_id',
         'owner_id',
+        'apartment_id',
         'amount',
         'payment_date',
         'method',
@@ -33,5 +34,10 @@ class OwnerPayment extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(Owner::class);
+    }
+
+    public function apartment(): BelongsTo
+    {
+        return $this->belongsTo(Apartment::class);
     }
 }
