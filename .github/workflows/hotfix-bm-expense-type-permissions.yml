@@ -1,0 +1,35 @@
+name: Hotfix BM expense type permissions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/hotfix-bm-expense-type-permissions.yml"
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync latest expense category API
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 2m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+            cd "$ROOT"
+            git fetch origin main
+            git show origin/main:bm-api/app/Http/Controllers/Api/ExpenseCategoryController.php > /tmp/ExpenseCategoryController.php
+            install -o pmsa -g pmsa -m 0644 /tmp/ExpenseCategoryController.php "$API/app/Http/Controllers/Api/ExpenseCategoryController.php"
+            php -l "$API/app/Http/Controllers/Api/ExpenseCategoryController.php"
+            grep -q "base_type" "$API/app/Http/Controllers/Api/ExpenseCategoryController.php"
+            grep -q "isAdmin" "$API/app/Http/Controllers/Api/ExpenseCategoryController.php"
+            cd "$API"
+            php artisan optimize:clear >/dev/null || true
+            echo "Latest admin base-type rules are live."
