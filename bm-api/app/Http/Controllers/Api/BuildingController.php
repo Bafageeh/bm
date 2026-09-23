@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Models\Building;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 class BuildingController extends BaseApiController
 {
@@ -77,24 +79,52 @@ class BuildingController extends BaseApiController
         ]);
 
         $targetCount = (int) $data['apartment_count'];
-        $currentCount = $building->apartments()->count();
 
-        if ($targetCount > $currentCount) {
-            $existingNumbers = $building->apartments()->pluck('number')->map(fn ($number) => (string) $number)->all();
+        DB::transaction(function () use ($building, $targetCount) {
+            $targetNumbers = $targetCount > 0
+                ? collect(range(1, $targetCount))->map(fn ($number) => (string) $number)->values()
+                : collect();
 
-            for ($number = 1; $building->apartments()->count() < $targetCount && $number <= 1000; $number++) {
-                if (in_array((string) $number, $existingNumbers, true)) {
+            $extraQuery = $building->apartments();
+            if ($targetNumbers->isNotEmpty()) {
+                $extraQuery->whereNotIn('number', $targetNumbers->all());
+            }
+
+            $extraApartments = $extraQuery->orderByRaw('CAST(number AS UNSIGNED), number')->get();
+            $assignedExtraNumbers = $extraApartments
+                ->whereNotNull('owner_id')
+                ->pluck('number')
+                ->values();
+
+            if ($assignedExtraNumbers->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'apartment_count' => [
+                        'لا يمكن تقليل عدد الشقق لأن الشقق التالية تحتوي على بيانات ملاك: ' .
+                        $assignedExtraNumbers->implode('، '),
+                    ],
+                ]);
+            }
+
+            if ($extraApartments->isNotEmpty()) {
+                $building->apartments()->whereKey($extraApartments->pluck('id'))->delete();
+            }
+
+            $existingNumbers = $building->apartments()
+                ->pluck('number')
+                ->map(fn ($number) => (string) $number)
+                ->all();
+
+            foreach ($targetNumbers as $number) {
+                if (in_array($number, $existingNumbers, true)) {
                     continue;
                 }
 
                 $building->apartments()->create([
-                    'number' => (string) $number,
+                    'number' => $number,
                     'status' => 'active',
                 ]);
-
-                $existingNumbers[] = (string) $number;
             }
-        }
+        });
 
         $updateData = [];
 
