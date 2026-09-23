@@ -862,11 +862,18 @@ function ApartmentOwnerCard({ apartment, onEdit, onPayments }) {
   </View>;
 }
 
-function OwnersScreen({ token, buildingId, apartments, reload, setTab, setInitialPaymentOwnerId }) {
+function OwnersScreen({ token, buildingId, apartments, expenses, payments, reload }) {
   const [form, setForm] = useState(emptyOwnerForm);
   const [editingApartment, setEditingApartment] = useState(null);
   const [loading, setLoading] = useState(false);
   const [ownerFormVisible, setOwnerFormVisible] = useState(false);
+  const [selectedApartment, setSelectedApartment] = useState(null);
+  const [paymentsVisible, setPaymentsVisible] = useState(false);
+  const [paymentFormVisible, setPaymentFormVisible] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState(todayDate());
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [savingPayment, setSavingPayment] = useState(false);
 
   const apartmentRows = useMemo(
     () => [...(apartments || [])].sort((a, b) => Number(a?.number || 0) - Number(b?.number || 0)),
@@ -926,8 +933,106 @@ function OwnersScreen({ token, buildingId, apartments, reload, setTab, setInitia
       Alert.alert('تنبيه', 'أدخل بيانات مالك الشقة أولًا');
       return;
     }
-    setInitialPaymentOwnerId?.(ownerId);
-    setTab?.('payments');
+    setSelectedApartment(apartment);
+    setPaymentFormVisible(false);
+    setPaymentAmount('');
+    setPaymentDate(todayDate());
+    setPaymentNotes('');
+    setPaymentsVisible(true);
+  };
+
+  const closePayments = () => {
+    setPaymentsVisible(false);
+    setPaymentFormVisible(false);
+    setSelectedApartment(null);
+    setPaymentAmount('');
+    setPaymentDate(todayDate());
+    setPaymentNotes('');
+  };
+
+  const selectedOwner = selectedApartment?.owner;
+  const ownerApartmentCount = Math.max(1, Number(selectedOwner?.apartment_count || selectedOwner?.apartments?.length || 1));
+  const selectedApartmentId = Number(selectedApartment?.id || 0);
+  const selectedOwnerId = Number(selectedOwner?.id || selectedApartment?.owner_id || 0);
+
+  const statementRows = useMemo(() => {
+    if (!selectedApartmentId || !selectedOwnerId) return [];
+
+    const expenseRows = (expenses || []).flatMap((expense) => {
+      let share = 0;
+      if (expense?.scope === 'selected' && Array.isArray(expense?.owners) && expense.owners.length > 0) {
+        const matchedOwner = expense.owners.find((owner) => Number(owner?.id) === selectedOwnerId);
+        if (!matchedOwner) return [];
+        const ownerShare = Number(matchedOwner?.pivot?.share_amount || 0) || (Number(expense.amount || 0) / expense.owners.length);
+        share = ownerShare / ownerApartmentCount;
+      } else {
+        share = Number(expense?.amount || 0) / Math.max(1, apartmentRows.length);
+      }
+
+      return [{
+        key: `expense-${expense.id}`,
+        date: expense.expense_date,
+        description: expense.category || 'مصروف',
+        debit: share,
+        credit: 0,
+        sortId: Number(expense.id || 0),
+      }];
+    });
+
+    const paymentRows = (payments || [])
+      .filter((payment) => Number(payment?.apartment_id || 0) === selectedApartmentId)
+      .map((payment) => ({
+        key: `payment-${payment.id}`,
+        date: payment.payment_date,
+        description: payment.notes || 'دفعة',
+        debit: 0,
+        credit: Number(payment.amount || 0),
+        sortId: Number(payment.id || 0),
+      }));
+
+    let runningBalance = 0;
+    return [...expenseRows, ...paymentRows]
+      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || a.sortId - b.sortId)
+      .map((row) => {
+        runningBalance += row.credit - row.debit;
+        return { ...row, balance: runningBalance };
+      })
+      .reverse();
+  }, [expenses, payments, selectedApartmentId, selectedOwnerId, ownerApartmentCount, apartmentRows.length]);
+
+  const statementTotals = useMemo(() => statementRows.reduce((totals, row) => ({
+    debit: totals.debit + Number(row.debit || 0),
+    credit: totals.credit + Number(row.credit || 0),
+  }), { debit: 0, credit: 0 }), [statementRows]);
+
+  const saveApartmentPayment = async () => {
+    if (!selectedApartment || !selectedOwnerId) return;
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return Alert.alert('تنبيه', 'أدخل مبلغ الدفعة بشكل صحيح');
+
+    try {
+      setSavingPayment(true);
+      await request(`/buildings/${buildingId}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          owner_id: selectedOwnerId,
+          apartment_id: selectedApartment.id,
+          amount,
+          payment_date: normalizeDateForApi(paymentDate),
+          method: 'تحويل',
+          notes: paymentNotes.trim(),
+        }),
+      }, token);
+      setPaymentAmount('');
+      setPaymentDate(todayDate());
+      setPaymentNotes('');
+      setPaymentFormVisible(false);
+      await reload({ silent: true });
+    } catch (e) {
+      Alert.alert('تعذر إضافة الدفعة', e.message);
+    } finally {
+      setSavingPayment(false);
+    }
   };
 
   return <View style={styles.screenWrapper}>
@@ -962,6 +1067,56 @@ function OwnersScreen({ token, buildingId, apartments, reload, setTab, setInitia
             <Field label="ملاحظة" value={form.notes} onChangeText={(v) => setField('notes', v)} placeholder="ملاحظة اختيارية" multiline />
             <PrimaryButton title="حفظ بيانات الشقة" icon="save-outline" onPress={save} loading={loading} />
             <PrimaryButton title="إلغاء" icon="close-outline" onPress={resetForm} variant="light" />
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+
+    <Modal visible={paymentsVisible} transparent animationType="fade" onRequestClose={closePayments}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={closePayments} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={closePayments} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>كشف الحركة المالية - الشقة {selectedApartment?.number || ''}</Text>
+              <Text style={styles.ownerMeta}>{selectedOwner?.name || ''}</Text>
+            </View>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            <View style={styles.statementSummaryRow}>
+              <View style={styles.statementSummaryBox}><Text style={styles.statementSummaryLabel}>المصروفات</Text><Text style={styles.statementDebitText}>{money(statementTotals.debit)}</Text></View>
+              <View style={styles.statementSummaryBox}><Text style={styles.statementSummaryLabel}>الدفعات</Text><Text style={styles.statementCreditText}>{money(statementTotals.credit)}</Text></View>
+              <View style={styles.statementSummaryBox}><Text style={styles.statementSummaryLabel}>الرصيد</Text><Text style={styles.statementBalanceText}>{money(statementTotals.credit - statementTotals.debit)}</Text></View>
+            </View>
+
+            <Pressable onPress={() => setPaymentFormVisible((current) => !current)} style={({ pressed }) => [styles.statementAddPaymentBtn, pressed && styles.pressed]}>
+              <Ionicons name={paymentFormVisible ? "close-outline" : "add-circle-outline"} size={20} color="#fff" />
+              <Text style={styles.statementAddPaymentText}>{paymentFormVisible ? 'إغلاق إضافة الدفعة' : 'إضافة دفعة'}</Text>
+            </Pressable>
+
+            {paymentFormVisible ? <View style={styles.statementPaymentForm}>
+              <Field label="مبلغ الدفعة" value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="numeric" placeholder="0" />
+              <DatePickerField label="تاريخ الدفعة" value={paymentDate} onChange={setPaymentDate} />
+              <Field label="ملاحظة" value={paymentNotes} onChangeText={setPaymentNotes} placeholder="ملاحظة اختيارية" multiline />
+              <PrimaryButton title="حفظ الدفعة" icon="save-outline" onPress={saveApartmentPayment} loading={savingPayment} />
+            </View> : null}
+
+            <SectionTitle icon="receipt-outline" title="الحركة المالية" />
+            {statementRows.length === 0
+              ? <EmptyState icon="receipt-outline" title="لا توجد حركة مالية" text="لا توجد مصروفات أو دفعات مسجلة لهذه الشقة حتى الآن." />
+              : statementRows.map((row) => <View key={row.key} style={styles.statementRow}>
+                  <View style={styles.statementRowTop}>
+                    <Text style={styles.statementDescription}>{row.description}</Text>
+                    <Text style={styles.statementDate}>{displayDate(row.date)}</Text>
+                  </View>
+                  <View style={styles.statementAmountsRow}>
+                    <View style={styles.statementAmountCell}><Text style={styles.statementAmountLabel}>مدين</Text><Text style={styles.statementDebitText}>{row.debit ? money(row.debit) : '-'}</Text></View>
+                    <View style={styles.statementAmountCell}><Text style={styles.statementAmountLabel}>دائن</Text><Text style={styles.statementCreditText}>{row.credit ? money(row.credit) : '-'}</Text></View>
+                    <View style={styles.statementAmountCell}><Text style={styles.statementAmountLabel}>الرصيد</Text><Text style={styles.statementBalanceText}>{money(row.balance)}</Text></View>
+                  </View>
+                </View>)}
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -1025,7 +1180,7 @@ function useAutomaticOtaUpdates() {
 }
 
 function LoadingScreen() { return <View style={styles.loading}><ActivityIndicator color="#0f766e" size="large" /><Text style={styles.loadingText}>جاري التحميل...</Text></View>; }
-function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async () => { if (!selectedBuilding) return; setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} reload={reload} setTab={setTab} setInitialPaymentOwnerId={setInitialPaymentOwnerId} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'payments'} icon="wallet-outline" title="الدفعات" onPress={() => setTab('payments')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
+function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async (options = {}) => { if (!selectedBuilding) return; const silent = options?.silent === true; if (!silent) setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { if (!silent) setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} expenses={expenses} payments={payments} reload={reload} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'payments'} icon="wallet-outline" title="الدفعات" onPress={() => setTab('payments')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
 function TabButton({ active, icon, title, onPress }) { return <Pressable onPress={onPress} style={styles.tabBtn}><Ionicons name={icon} size={21} color={active ? '#0f766e' : '#94a3b8'} /><Text style={[styles.tabText, active && styles.tabTextActive]}>{title}</Text></Pressable>; }
 export default function App() {
   useAutomaticOtaUpdates();
@@ -1098,6 +1253,7 @@ const styles = StyleSheet.create({
   lockedCategoryField: { minHeight: 54, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 16, paddingHorizontal: 14, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginBottom: 12 }, lockedCategoryText: { color: '#0f766e', fontWeight: '900', fontSize: 15, textAlign: 'right' },
   expenseSummaryCard: { backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#dbe5ea', padding: 16, marginBottom: 14, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, shadowColor: '#0f172a', shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 }, expenseSummaryMain: { flex: 1, alignItems: 'flex-end' }, expenseSummaryLabel: { color: '#64748b', fontSize: 12, fontWeight: '800', textAlign: 'right' }, expenseSummaryAmount: { color: '#0f172a', fontSize: 23, fontWeight: '900', textAlign: 'right', marginTop: 4 }, expenseSummaryMeta: { color: '#94a3b8', fontSize: 11, fontWeight: '700', textAlign: 'right', marginTop: 4 }, expenseSummaryAddBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
   categoryTypeNote: { color: '#64748b', fontSize: 11, marginTop: 4, textAlign: 'right' }, typeDropdownField: { minHeight: 54, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, paddingHorizontal: 14, flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 }, typeDropdownText: { flex: 1, color: '#0f172a', fontWeight: '900', fontSize: 15, textAlign: 'right' }, typeDropdownMenu: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, overflow: 'hidden', marginBottom: 12 }, typeDropdownItem: { minHeight: 48, paddingHorizontal: 14, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }, typeDropdownItemActive: { backgroundColor: '#ecfdf5' }, typeDropdownItemText: { flex: 1, color: '#334155', fontWeight: '800', textAlign: 'right' }, typeDropdownItemTextActive: { color: '#0f766e' }, typeDropdownOther: { borderBottomWidth: 0, backgroundColor: '#f8fafc' },
+  statementSummaryRow: { flexDirection: 'row-reverse', gap: 7, marginBottom: 10 }, statementSummaryBox: { flex: 1, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 14, padding: 9 }, statementSummaryLabel: { color: '#64748b', fontSize: 10, fontWeight: '800', textAlign: 'right' }, statementAddPaymentBtn: { minHeight: 46, borderRadius: 15, backgroundColor: '#0f766e', flexDirection: 'row-reverse', gap: 7, alignItems: 'center', justifyContent: 'center', marginBottom: 10 }, statementAddPaymentText: { color: '#fff', fontWeight: '900', fontSize: 14 }, statementPaymentForm: { backgroundColor: '#f8fafc', borderRadius: 18, padding: 12, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 4 }, statementRow: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, padding: 11, marginBottom: 8 }, statementRowTop: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, statementDescription: { flex: 1, color: '#0f172a', fontWeight: '900', fontSize: 13, textAlign: 'right' }, statementDate: { color: '#64748b', fontSize: 11, fontWeight: '700' }, statementAmountsRow: { flexDirection: 'row-reverse', gap: 6, marginTop: 8 }, statementAmountCell: { flex: 1, backgroundColor: '#f8fafc', borderRadius: 11, padding: 7 }, statementAmountLabel: { color: '#94a3b8', fontSize: 9, textAlign: 'right' }, statementDebitText: { color: '#b91c1c', fontWeight: '900', fontSize: 11, textAlign: 'right', marginTop: 2 }, statementCreditText: { color: '#047857', fontWeight: '900', fontSize: 11, textAlign: 'right', marginTop: 2 }, statementBalanceText: { color: '#0f172a', fontWeight: '900', fontSize: 11, textAlign: 'right', marginTop: 2 },
   manageOwnerCard: { marginBottom: 7, backgroundColor: '#fff', borderRadius: 18, padding: 6, borderWidth: 1, borderColor: '#e2e8f0' }, manageOwnerCardWithMenu: { position: 'relative', overflow: 'visible' }, ownerCardMenuButton: { position: 'absolute', top: 11, left: 12, width: 42, height: 42, borderRadius: 21, backgroundColor: '#ecfeff', borderWidth: 1, borderColor: '#a7f3d0', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 10, elevation: 3, zIndex: 20 }, ownerCardMenu: { position: 'absolute', top: 54, left: 12, width: 132, backgroundColor: '#fff', borderRadius: 16, paddingVertical: 6, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#0f172a', shadowOpacity: 0.14, shadowRadius: 14, elevation: 8, zIndex: 30 }, ownerCardMenuItem: { minHeight: 40, paddingHorizontal: 12, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }, ownerCardMenuText: { color: '#0f172a', fontWeight: '900', fontSize: 13, textAlign: 'right' }, ownerMetaRow: { flexDirection: 'row-reverse', gap: 6, flexWrap: 'wrap', paddingHorizontal: 3, paddingTop: 4 }, ownerMeta: { fontSize: 10, color: '#64748b', textAlign: 'right' }, actionsRow: { flexDirection: 'row-reverse', gap: 6, marginTop: 6 }, actionBtn: { flex: 1, height: 33, borderRadius: 11, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 5 }, deleteBtn: { backgroundColor: '#fef2f2' }, actionText: { color: '#0f766e', fontWeight: '900', fontSize: 12 }, deleteText: { color: '#ef4444' }, ownerFloatingAdd: { position: 'absolute', top: 8, left: 16, width: 46, height: 46, borderRadius: 23, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.18, shadowRadius: 11, elevation: 8, zIndex: 10 },
   modalRoot: { flex: 1, justifyContent: 'flex-start', paddingTop: Platform.OS === 'ios' ? 70 : 44, paddingHorizontal: 14 }, modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.42)' }, floatingFormCard: { maxHeight: '86%', backgroundColor: '#fff', borderRadius: 26, padding: 14, shadowColor: '#0f172a', shadowOpacity: 0.18, shadowRadius: 18, elevation: 10 }, floatingFormHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingBottom: 12, marginBottom: 8 }, closeFloatingBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }, floatingFormTitle: { color: '#0f172a', fontWeight: '900', fontSize: 18, textAlign: 'right' }, floatingFormBody: { paddingTop: 4, paddingBottom: 8 },
   settingsHint: { color: '#64748b', textAlign: 'right', lineHeight: 21, marginBottom: 12 }, settingsLink: { backgroundColor: '#fff', borderRadius: 22, padding: 14, marginBottom: 10, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#e2e8f0' }, settingsIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center' }, settingsTitle: { color: '#0f172a', fontWeight: '900', fontSize: 15, textAlign: 'right' }, settingsText: { color: '#64748b', fontSize: 12, marginTop: 4, textAlign: 'right' },
