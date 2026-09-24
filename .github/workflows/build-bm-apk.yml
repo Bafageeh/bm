@@ -43,13 +43,9 @@ jobs:
         working-directory: bm-mobile/android
         run: |
           chmod +x gradlew
-          if ./gradlew assembleRelease --no-daemon; then
-            APK_PATH="app/build/outputs/apk/release/app-release.apk"
-          else
-            echo "Release build failed; building debug APK instead."
-            ./gradlew assembleDebug --no-daemon
-            APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
-          fi
+          printf '\norg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8\norg.gradle.parallel=false\n' >> gradle.properties
+          ./gradlew assembleDebug --no-daemon --max-workers=2
+          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
           test -f "$APK_PATH"
           mkdir -p ../../apk-output
           cp "$APK_PATH" ../../apk-output/BM-Management.apk
