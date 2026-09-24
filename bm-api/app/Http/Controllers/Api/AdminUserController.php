@@ -22,7 +22,7 @@ class AdminUserController extends BaseApiController
                 'managedBuildings:id,name',
                 'ownerProfiles.building:id,name',
             ])
-            ->orderByRaw("FIELD(role, 'admin', 'manager', 'owner')")
+            ->orderByRaw("CASE role WHEN 'admin' THEN 1 WHEN 'manager' THEN 2 WHEN 'owner' THEN 3 ELSE 4 END")
             ->orderBy('name')
             ->get()
             ->map(function (User $account) use ($allBuildings) {
