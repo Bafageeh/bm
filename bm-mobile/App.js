@@ -472,6 +472,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
   const [editNewAttachments, setEditNewAttachments] = useState([]);
   const [attachmentsVisible, setAttachmentsVisible] = useState(false);
   const [attachmentExpense, setAttachmentExpense] = useState(null);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState(null);
   const [savingExpense, setSavingExpense] = useState(false);
 
   useEffect(() => {
@@ -641,7 +642,52 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
 
   const openExpenseAttachments = (item) => {
     setAttachmentExpense(item);
+    setDeletingAttachmentId(null);
     setAttachmentsVisible(true);
+  };
+
+  const deleteExpenseAttachment = (attachment) => {
+    if (!attachmentExpense?.id || !attachment?.id) return;
+    const attachmentIndex = (attachmentExpense?.attachments || []).findIndex((item) => item.id === attachment.id);
+    const displayName = attachmentDisplayName(attachment, attachmentIndex >= 0 ? attachmentIndex : 0);
+
+    Alert.alert(
+      'حذف المرفق',
+      `هل أنت متأكد من حذف "${displayName}"؟`,
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'حذف',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingAttachmentId(attachment.id);
+              const response = await request(
+                `/buildings/${buildingId}/expenses/${attachmentExpense.id}/attachments/${attachment.id}`,
+                { method: 'DELETE' },
+                token
+              );
+              const updatedExpense = response?.data || {
+                ...attachmentExpense,
+                attachments: (attachmentExpense.attachments || []).filter((item) => item.id !== attachment.id),
+              };
+
+              setAttachmentExpense(updatedExpense);
+              setSelectedExpenseCategory((current) => current ? {
+                ...current,
+                items: (current.items || []).map((item) => item.id === updatedExpense.id ? updatedExpense : item),
+              } : current);
+              setEditingExpense((current) => current?.id === updatedExpense.id ? updatedExpense : current);
+              await reload();
+            } catch (error) {
+              Alert.alert('تعذر حذف المرفق', error.message || 'حدث خطأ أثناء حذف المرفق');
+            } finally {
+              setDeletingAttachmentId(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const add = async () => {
@@ -803,10 +849,20 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
             </View>
           </View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            {(attachmentExpense?.attachments || []).length === 0 ? <EmptyState icon="attach-outline" title="لا توجد مرفقات" text="تم حذف جميع مرفقات هذا المصروف." /> : null}
             {(attachmentExpense?.attachments || []).map((attachment) => {
               const url = expenseAttachmentUrl(attachment.url);
               const pdf = isPdfAttachment(attachment);
+              const isDeleting = deletingAttachmentId === attachment.id;
               return <View key={attachment.id} style={styles.expenseAttachmentViewerCard}>
+                <Pressable
+                  accessibilityLabel="حذف المرفق"
+                  disabled={isDeleting}
+                  onPress={() => deleteExpenseAttachment(attachment)}
+                  style={({ pressed }) => [styles.expenseAttachmentDeleteBtn, pressed && styles.pressed]}
+                >
+                  {isDeleting ? <ActivityIndicator size="small" color="#ef4444" /> : <Ionicons name="trash-outline" size={19} color="#ef4444" />}
+                </Pressable>
                 {pdf
                   ? <Pressable onPress={() => Linking.openURL(url)} style={({ pressed }) => [styles.expensePdfOpenBtn, pressed && styles.pressed]}>
                       <Ionicons name="document-text-outline" size={28} color="#dc2626" />
@@ -1438,7 +1494,7 @@ const styles = StyleSheet.create({
   expenseAttachmentPicker: { minHeight: 64, borderRadius: 16, borderWidth: 1, borderColor: '#ddd6fe', backgroundColor: '#faf5ff', paddingHorizontal: 13, paddingVertical: 10, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 10 }, expenseAttachmentPickerTitle: { color: '#5b21b6', fontWeight: '900', fontSize: 14, textAlign: 'right' }, expenseAttachmentHint: { color: '#64748b', fontSize: 11, marginTop: 3, textAlign: 'right' },
   expenseExistingAttachments: { minHeight: 38, borderRadius: 12, backgroundColor: '#ecfdf5', flexDirection: 'row-reverse', alignItems: 'center', gap: 7, paddingHorizontal: 10, marginBottom: 8 }, expenseExistingAttachmentsText: { color: '#0f766e', fontWeight: '800', fontSize: 12 },
   expenseSelectedAttachment: { borderRadius: 13, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff', padding: 10, marginBottom: 7 }, expenseSelectedAttachmentTop: { minHeight: 34, flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }, expenseSelectedAttachmentName: { flex: 1, color: '#334155', fontWeight: '800', fontSize: 12, textAlign: 'right' }, expenseAttachmentNameInput: { minHeight: 42, marginTop: 7, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 11, paddingHorizontal: 10, color: '#0f172a', fontSize: 13 }, expenseAttachmentRemoveBtn: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center' },
-  expenseAttachmentViewerCard: { borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff', padding: 10, marginBottom: 10 }, expenseAttachmentImage: { width: '100%', height: 260, backgroundColor: '#f8fafc', borderRadius: 14, marginBottom: 8 }, expenseAttachmentName: { color: '#0f172a', fontWeight: '900', fontSize: 13, textAlign: 'right' }, expensePdfOpenBtn: { minHeight: 76, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, padding: 8, backgroundColor: '#fef2f2', borderRadius: 14 },
+  expenseAttachmentViewerCard: { position: 'relative', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff', padding: 10, marginBottom: 10 }, expenseAttachmentDeleteBtn: { position: 'absolute', top: 8, left: 8, width: 36, height: 36, borderRadius: 12, backgroundColor: '#fff1f2', borderWidth: 1, borderColor: '#fecdd3', alignItems: 'center', justifyContent: 'center', zIndex: 20, elevation: 5 }, expenseAttachmentImage: { width: '100%', height: 260, backgroundColor: '#f8fafc', borderRadius: 14, marginBottom: 8 }, expenseAttachmentName: { color: '#0f172a', fontWeight: '900', fontSize: 13, textAlign: 'right' }, expensePdfOpenBtn: { minHeight: 76, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, padding: 8, paddingLeft: 50, backgroundColor: '#fef2f2', borderRadius: 14 },
   categoryModalAddBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 6, elevation: 3 },
   lockedCategoryField: { minHeight: 54, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 16, paddingHorizontal: 14, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginBottom: 12 }, lockedCategoryText: { color: '#0f766e', fontWeight: '900', fontSize: 15, textAlign: 'right' },
   expenseSummaryCard: { backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#dbe5ea', padding: 16, marginBottom: 14, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, shadowColor: '#0f172a', shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 }, expenseSummaryMain: { flex: 1, alignItems: 'flex-end' }, expenseSummaryLabel: { color: '#64748b', fontSize: 12, fontWeight: '800', textAlign: 'right' }, expenseSummaryAmount: { color: '#0f172a', fontSize: 23, fontWeight: '900', textAlign: 'right', marginTop: 4 }, expenseSummaryMeta: { color: '#94a3b8', fontSize: 11, fontWeight: '700', textAlign: 'right', marginTop: 4 }, expenseSummaryAddBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
