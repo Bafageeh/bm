@@ -1548,8 +1548,94 @@ function PaymentsScreen({ token, buildingId, owners, payments, reload, initialOw
   const add = async () => { const apiDate = normalizeDateForApi(paymentDate); if (!ownerId) return Alert.alert('تنبيه', 'اختر المالك'); if (!amount) return Alert.alert('تنبيه', 'أدخل مبلغ الدفعة'); try { setLoading(true); await request(`/buildings/${buildingId}/payments`, { method: 'POST', body: JSON.stringify({ owner_id: ownerId, amount: Number(amount), payment_date: apiDate, method: 'تحويل', notes }) }, token); setAmount(''); setPaymentDate(todayDate()); setNotes(''); await reload(); } catch (e) { Alert.alert('تعذر إضافة الدفعة', e.message); } finally { setLoading(false); } };
   return <ScrollView contentContainerStyle={styles.screenContent}><SectionTitle icon="card-outline" title="تسجيل دفعة مالك" /><View style={styles.formCard}><Text style={styles.label}>المالك</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>{(owners || []).map((owner) => <Pressable key={owner.id} onPress={() => setOwnerId(owner.id)} style={[styles.chip, ownerId === owner.id && styles.chipActive]}><Text style={[styles.chipText, ownerId === owner.id && styles.chipTextActive]}>{owner.name}</Text></Pressable>)}</ScrollView><Field label="المبلغ" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" /><DatePickerField label="تاريخ الدفعة" value={paymentDate} onChange={setPaymentDate} /><Field label="ملاحظة" value={notes} onChangeText={setNotes} placeholder="ملاحظة اختيارية" multiline /><PrimaryButton title="حفظ الدفعة" icon="save-outline" onPress={add} loading={loading} /></View><SectionTitle icon="wallet-outline" title="آخر الدفعات" />{(payments || []).map((item) => <View key={item.id} style={styles.rowCard}><View style={styles.rowIcon}><Ionicons name="wallet" size={20} color="#0f766e" /></View><View style={styles.flex1}><Text style={styles.cardTitle}>{item.owner?.name || 'مالك'}</Text><Text style={styles.cardSub}>{displayDate(item.payment_date)} - {displayTextDates(item.notes || item.method) || 'دفعة'}</Text></View><Text style={styles.amountText}>{money(item.amount)}</Text></View>)}</ScrollView>;
 }
-function SettingsScreen({ dashboard, setTab, user, onManageBuildings }) { const count = dashboard?.stats?.apartment_count || 0; const cycle = displayDate(dashboard?.building?.annual_cycle_starts_on, 'غير محدد'); return <ScrollView contentContainerStyle={styles.screenContent}><ScreenCode code="#S-005" /><SectionTitle icon="settings-outline" title="الإعدادات" /><Text style={styles.settingsHint}>روابط التحكم الرئيسية للمبنى.</Text><SettingsLink icon="business-outline" title="المباني" text="التنقل بين المباني وإضافة وتعديل وحذف المباني، مع فصل كامل لبيانات كل مبنى." onPress={onManageBuildings} />{user?.role === 'admin' ? <SettingsLink icon="pricetags-outline" title="الأنواع الأساسية للصرف" text="إضافة وتعديل أنواع الصرف الأساسية للـ admin" onPress={() => setTab('expenseCategories')} /> : null}<SettingsLink icon="business-outline" title="إعدادات المبنى" text={`عدد الشقق: ${count} - بداية الدورة: ${cycle}`} onPress={() => setTab('buildingSettings')} /></ScrollView>; }
+function SettingsScreen({ dashboard, setTab, user, onManageBuildings }) { const count = dashboard?.stats?.apartment_count || 0; const cycle = displayDate(dashboard?.building?.annual_cycle_starts_on, 'غير محدد'); return <ScrollView contentContainerStyle={styles.screenContent}><ScreenCode code="#S-005" /><SectionTitle icon="settings-outline" title="الإعدادات" /><Text style={styles.settingsHint}>روابط التحكم الرئيسية للمبنى.</Text><SettingsLink icon="person-circle-outline" title="إعدادات المستخدم" text="اسم المستخدم، رقم الجوال، البريد الإلكتروني، وتعديل الرقم السري." onPress={() => setTab('userSettings')} /><SettingsLink icon="business-outline" title="المباني" text="التنقل بين المباني وإضافة وتعديل وحذف المباني، مع فصل كامل لبيانات كل مبنى." onPress={onManageBuildings} />{user?.role === 'admin' ? <SettingsLink icon="pricetags-outline" title="الأنواع الأساسية للصرف" text="إضافة وتعديل أنواع الصرف الأساسية للـ admin" onPress={() => setTab('expenseCategories')} /> : null}<SettingsLink icon="business-outline" title="إعدادات المبنى" text={`عدد الشقق: ${count} - بداية الدورة: ${cycle}`} onPress={() => setTab('buildingSettings')} /></ScrollView>; }
 function SettingsLink({ icon, title, text, onPress }) { return <Pressable onPress={onPress} style={({ pressed }) => [styles.settingsLink, pressed && styles.pressed]}><View style={styles.settingsIcon}><Ionicons name={icon} size={24} color="#0f766e" /></View><View style={styles.flex1}><Text style={styles.settingsTitle}>{title}</Text><Text style={styles.settingsText}>{displayTextDates(text)}</Text></View><Ionicons name="chevron-back" size={22} color="#64748b" /></Pressable>; }
+function UserSettingsScreen({ token, user, setTab, onUserUpdated }) {
+  const [username, setUsername] = useState(user?.username || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  useEffect(() => {
+    setUsername(user?.username || '');
+    setPhone(user?.phone || '');
+    setEmail(user?.email || '');
+  }, [user?.username, user?.phone, user?.email]);
+
+  const saveProfile = async () => {
+    const nextUsername = String(username || '').trim();
+    if (!nextUsername) return Alert.alert('تنبيه', 'أدخل اسم المستخدم');
+
+    try {
+      setProfileLoading(true);
+      const data = await request('/me', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: nextUsername,
+          phone: String(phone || '').trim() || null,
+          email: String(email || '').trim() || null,
+        }),
+      }, token);
+      if (data?.user) onUserUpdated?.(data.user);
+      Alert.alert('تم', 'تم حفظ بيانات المستخدم');
+    } catch (error) {
+      Alert.alert('تعذر حفظ بيانات المستخدم', error.message);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const savePassword = async () => {
+    if (!currentPassword) return Alert.alert('تنبيه', 'أدخل الرقم السري الحالي');
+    if (!newPassword || newPassword.length < 6) return Alert.alert('تنبيه', 'الرقم السري الجديد يجب ألا يقل عن 6 أحرف');
+    if (newPassword !== passwordConfirmation) return Alert.alert('تنبيه', 'تأكيد الرقم السري غير مطابق');
+
+    try {
+      setPasswordLoading(true);
+      await request('/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          current_password: currentPassword,
+          password: newPassword,
+          password_confirmation: passwordConfirmation,
+        }),
+      }, token);
+      setCurrentPassword('');
+      setNewPassword('');
+      setPasswordConfirmation('');
+      Alert.alert('تم', 'تم تعديل الرقم السري بنجاح');
+    } catch (error) {
+      Alert.alert('تعذر تعديل الرقم السري', error.message);
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  return <ScrollView contentContainerStyle={styles.screenContent}>
+    <ScreenCode code="#S-008" />
+    <SectionTitle icon="person-circle-outline" title="إعدادات المستخدم" />
+    <View style={styles.formCard}>
+      <Field label="اسم المستخدم" value={username} onChangeText={setUsername} placeholder="اسم المستخدم" />
+      <Field label="رقم الجوال" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="05xxxxxxxx" />
+      <Field label="البريد الإلكتروني" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="name@example.com" />
+      <PrimaryButton title="حفظ بيانات المستخدم" icon="save-outline" onPress={saveProfile} loading={profileLoading} />
+    </View>
+
+    <SectionTitle icon="lock-closed-outline" title="تعديل الرقم السري" />
+    <View style={styles.formCard}>
+      <Field label="الرقم السري الحالي" value={currentPassword} onChangeText={setCurrentPassword} placeholder="••••••" secureTextEntry />
+      <Field label="الرقم السري الجديد" value={newPassword} onChangeText={setNewPassword} placeholder="6 أحرف على الأقل" secureTextEntry />
+      <Field label="تأكيد الرقم السري الجديد" value={passwordConfirmation} onChangeText={setPasswordConfirmation} placeholder="أعد إدخال الرقم السري" secureTextEntry />
+      <PrimaryButton title="تعديل الرقم السري" icon="key-outline" onPress={savePassword} loading={passwordLoading} />
+      <PrimaryButton title="رجوع للإعدادات" icon="arrow-forward-outline" onPress={() => setTab('settings')} variant="light" />
+    </View>
+  </ScrollView>;
+}
+
 function BuildingSettingsScreen({ token, buildingId, dashboard, reload, setTab }) {
   const [buildingName, setBuildingName] = useState(dashboard?.building?.name || ''); const [apartmentCount, setApartmentCount] = useState(String(dashboard?.stats?.apartment_count || '')); const [annualCycleStartsOn, setAnnualCycleStartsOn] = useState(normalizeDateForApi(dashboard?.building?.annual_cycle_starts_on || todayDate())); const [loading, setLoading] = useState(false);
   useEffect(() => { setBuildingName(dashboard?.building?.name || ''); setApartmentCount(String(dashboard?.stats?.apartment_count || '')); setAnnualCycleStartsOn(normalizeDateForApi(dashboard?.building?.annual_cycle_starts_on || todayDate())); }, [dashboard?.building?.name, dashboard?.stats?.apartment_count, dashboard?.building?.annual_cycle_starts_on]);
@@ -1558,7 +1644,7 @@ function BuildingSettingsScreen({ token, buildingId, dashboard, reload, setTab }
 }
 function OwnerOnlyScreen({ token }) { const [data, setData] = useState(null); const [loading, setLoading] = useState(true); useEffect(() => { request('/owner/dashboard', {}, token).then(setData).catch((e) => Alert.alert('خطأ', e.message)).finally(() => setLoading(false)); }, [token]); if (loading) return <LoadingScreen />; const profile = data?.owners?.[0]; if (!profile) return <EmptyState icon="home-outline" title="لا توجد بيانات" text="لم يتم ربط حسابك بمالك بعد." />; return <ScrollView contentContainerStyle={styles.screenContent}><ScreenCode code="#S-012" /><Dashboard dashboard={{ building: profile.building, stats: {}, owners: [profile.summary] }} /><SectionTitle icon="receipt-outline" title="تفصيل نصيبك من المصروفات" />{(profile.expenses || []).map((item) => <ExpenseRow key={item.id} item={{ ...item, amount: item.owner_share }} />)}</ScrollView>; }
 function LoadingScreen() { return <View style={styles.loading}><ActivityIndicator color="#0f766e" size="large" /><Text style={styles.loadingText}>جاري التحميل...</Text></View>; }
-function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async (options = {}) => { if (!selectedBuilding) return; const silent = options?.silent === true; if (!silent) setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { if (!silent) setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} expenses={expenses} payments={payments} reload={reload} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} onManageBuildings={() => setSelectedBuilding(null)} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
+function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout, onUserUpdated }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async (options = {}) => { if (!selectedBuilding) return; const silent = options?.silent === true; if (!silent) setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { if (!silent) setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} expenses={expenses} payments={payments} reload={reload} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} onManageBuildings={() => setSelectedBuilding(null)} />}{tab === 'userSettings' && <UserSettingsScreen token={token} user={user} setTab={setTab} onUserUpdated={onUserUpdated} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'settings' || tab === 'userSettings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
 function TabButton({ active, icon, title, onPress }) { return <Pressable onPress={onPress} style={styles.tabBtn}><Ionicons name={icon} size={21} color={active ? '#0f766e' : '#94a3b8'} /><Text style={[styles.tabText, active && styles.tabTextActive]}>{title}</Text></Pressable>; }
 export default function App() {
   const [token, setToken] = useState(null);
@@ -1608,7 +1694,7 @@ export default function App() {
         }} />
       : !selectedBuilding && user?.role !== 'owner'
         ? <BuildingPicker token={token} user={user} onSelect={setSelectedBuilding} onLogout={logout} onBuildingsChanged={(nextBuildings) => setUser((current) => current ? { ...current, buildings: nextBuildings } : current)} />
-        : <AppShell token={token} user={user} selectedBuilding={selectedBuilding} setSelectedBuilding={setSelectedBuilding} onLogout={logout} />}
+        : <AppShell token={token} user={user} selectedBuilding={selectedBuilding} setSelectedBuilding={setSelectedBuilding} onLogout={logout} onUserUpdated={setUser} />}
   </SafeAreaProvider>;
 }
 
