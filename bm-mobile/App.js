@@ -1562,29 +1562,93 @@ function AdminUsersScreen({ token, setTab }) {
   }, [token]);
 
   const roleLabel = (role) => role === 'admin' ? 'مدير التطبيق' : role === 'manager' ? 'مدير مبنى' : role === 'owner' ? 'مالك' : role || '-';
+  const admins = (users || []).filter((item) => item.role === 'admin');
+  const managers = (users || []).filter((item) => item.role === 'manager');
+  const owners = (users || []).filter((item) => item.role === 'owner');
+  const buildingMap = new Map();
+
+  [...managers, ...owners].forEach((item) => {
+    (item.buildings || []).forEach((building) => {
+      if (!building?.id) return;
+      if (!buildingMap.has(building.id)) buildingMap.set(building.id, building);
+    });
+  });
+
+  const buildings = Array.from(buildingMap.values()).sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'ar'));
+  const orphanManagers = managers.filter((item) => !(item.buildings || []).length);
+  const orphanOwners = owners.filter((item) => !(item.buildings || []).length);
+
+  const renderPermissions = (item) => <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+    {(item.permissions || []).map((permission, index) => <View key={index} style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 }}><Text style={{ color: '#475569', fontSize: 11, fontWeight: '700' }}>{permission}</Text></View>)}
+  </View>;
+
+  const renderUserCard = (item, suffix = '') => <View key={String(item.id) + '-' + suffix} style={[styles.formCard, { marginBottom: 8, padding: 12 }]}>
+    <View style={styles.ownerTop}>
+      <View style={styles.ownerAvatar}><MaterialCommunityIcons name="account-circle-outline" size={24} color="#0f766e" /></View>
+      <View style={styles.flex1}>
+        <Text style={styles.cardTitle}>{item.name || item.username || 'مستخدم'}</Text>
+        <Text style={styles.cardSub}>اسم الدخول: {item.username || '-'}</Text>
+      </View>
+      <View style={[styles.badge, styles.badgeBalanced]}><Text style={styles.badgeText}>{roleLabel(item.role)}</Text></View>
+    </View>
+    <Text style={[styles.settingsText, { marginTop: 8 }]}>الحالة: {item.status === 'active' ? 'نشط' : (item.status || '-')}</Text>
+    {item.role === 'admin' ? <Text style={styles.settingsText}>المباني: جميع المباني</Text> : null}
+    {renderPermissions(item)}
+  </View>;
+
+  const renderBuildingGroup = (building, role, roleTitle) => {
+    const groupUsers = (users || []).filter((item) => item.role === role && (item.buildings || []).some((linked) => linked?.id === building.id));
+    if (!groupUsers.length) return null;
+    return <View key={role + '-' + building.id} style={{ marginBottom: 12 }}>
+      <View style={[styles.formCard, { padding: 10, marginBottom: 8, backgroundColor: '#f8fafc' }]}>
+        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+          <View style={styles.settingsIcon}><Ionicons name="business-outline" size={22} color="#0f766e" /></View>
+          <View style={styles.flex1}>
+            <Text style={styles.settingsTitle}>{building.name}</Text>
+            <Text style={styles.settingsText}>{roleTitle}: {groupUsers.length}</Text>
+          </View>
+        </View>
+      </View>
+      {groupUsers.map((item) => renderUserCard(item, role + '-' + building.id))}
+    </View>;
+  };
 
   if (loading) return <LoadingScreen />;
 
   return <ScrollView contentContainerStyle={styles.screenContent}>
     <SectionTitle icon="people-circle-outline" title="المستخدمون والصلاحيات" />
-    <Text style={styles.settingsHint}>عرض فقط لجميع مستخدمي النظام وصلاحياتهم والمباني المرتبطة بهم.</Text>
-    {(users || []).map((item) => {
-      const buildingNames = (item.buildings || []).map((building) => building?.name).filter(Boolean);
-      return <View key={item.id} style={[styles.formCard, { marginBottom: 10 }]}>
-        <View style={styles.ownerTop}>
-          <View style={styles.ownerAvatar}><MaterialCommunityIcons name="account-circle-outline" size={24} color="#0f766e" /></View>
-          <View style={styles.flex1}>
-            <Text style={styles.cardTitle}>{item.name || item.username || 'مستخدم'}</Text>
-            <Text style={styles.cardSub}>اسم الدخول: {item.username || '-'}</Text>
-          </View>
-          <View style={[styles.badge, styles.badgeBalanced]}><Text style={styles.badgeText}>{roleLabel(item.role)}</Text></View>
-        </View>
-        <Text style={[styles.settingsText, { marginTop: 10 }]}>الحالة: {item.status === 'active' ? 'نشط' : (item.status || '-')}</Text>
-        <Text style={styles.settingsText}>المبنى المرتبط: {buildingNames.length ? buildingNames.join('، ') : 'غير مرتبط بمبنى'}</Text>
-        <Text style={[styles.settingsTitle, { marginTop: 10, fontSize: 14 }]}>الصلاحيات</Text>
-        {(item.permissions || []).map((permission, index) => <Text key={index} style={styles.settingsText}>• {permission}</Text>)}
-      </View>;
-    })}
+    <Text style={styles.settingsHint}>تم توزيع المستخدمين حسب نوع الصلاحية ثم حسب المبنى لتسهيل الوصول إليهم.</Text>
+
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+      <View style={styles.chip}><Text style={styles.chipText}>الكل: {(users || []).length}</Text></View>
+      <View style={styles.chip}><Text style={styles.chipText}>مدير التطبيق: {admins.length}</Text></View>
+      <View style={styles.chip}><Text style={styles.chipText}>مديرو المباني: {managers.length}</Text></View>
+      <View style={styles.chip}><Text style={styles.chipText}>الملاك: {owners.length}</Text></View>
+    </ScrollView>
+
+    {admins.length ? <>
+      <SectionTitle icon="shield-checkmark-outline" title={'مدير التطبيق (' + admins.length + ')'} />
+      {admins.map((item) => renderUserCard(item, 'admin'))}
+    </> : null}
+
+    {managers.length ? <>
+      <SectionTitle icon="business-outline" title={'مديرو المباني (' + managers.length + ')'} />
+      {buildings.map((building) => renderBuildingGroup(building, 'manager', 'عدد المديرين'))}
+      {orphanManagers.length ? <View style={{ marginBottom: 12 }}>
+        <Text style={[styles.settingsTitle, { marginBottom: 8 }]}>غير مرتبط بمبنى</Text>
+        {orphanManagers.map((item) => renderUserCard(item, 'manager-orphan'))}
+      </View> : null}
+    </> : null}
+
+    {owners.length ? <>
+      <SectionTitle icon="people-outline" title={'الملاك (' + owners.length + ')'} />
+      {buildings.map((building) => renderBuildingGroup(building, 'owner', 'عدد الملاك'))}
+      {orphanOwners.length ? <View style={{ marginBottom: 12 }}>
+        <Text style={[styles.settingsTitle, { marginBottom: 8 }]}>غير مرتبط بمبنى</Text>
+        {orphanOwners.map((item) => renderUserCard(item, 'owner-orphan'))}
+      </View> : null}
+    </> : null}
+
     {(users || []).length === 0 ? <EmptyState icon="people-outline" title="لا يوجد مستخدمون" text="لا توجد حسابات لعرضها." /> : null}
     <PrimaryButton title="رجوع للإعدادات" icon="arrow-forward-outline" onPress={() => setTab('settings')} variant="light" />
   </ScrollView>;
