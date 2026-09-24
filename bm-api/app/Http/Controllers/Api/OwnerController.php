@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class OwnerController extends BaseApiController
@@ -388,13 +389,12 @@ class OwnerController extends BaseApiController
             ]);
         }
 
-        if ($candidates->count() > 1) {
-            throw ValidationException::withMessages([
-                'national_id' => ['رقم الهوية ورقم الجوال مرتبطان بحسابين مختلفين. تحقق من بيانات المالك.'],
-            ]);
-        }
-
         $user = $candidates->first();
+
+        if ($candidates->count() > 1) {
+            $primaryUser = $currentUser ?: $profileUser ?: $loginUser ?: $phoneUser;
+            $user = $this->mergeOwnerUsers($candidates, $primaryUser);
+        }
 
         if ($user && $phoneUser && ! $profileUser && ! $loginUser && $user->username && $user->username !== $login) {
             throw ValidationException::withMessages([
@@ -430,6 +430,58 @@ class OwnerController extends BaseApiController
         $user->forceFill($updates)->save();
 
         return $user;
+    }
+
+    private function mergeOwnerUsers($candidates, User $primaryUser): User
+    {
+        $duplicateUsers = $candidates
+            ->filter(fn ($candidate) => (int) $candidate->id !== (int) $primaryUser->id)
+            ->values();
+
+        foreach ($duplicateUsers as $duplicateUser) {
+            Owner::query()
+                ->where('user_id', $duplicateUser->id)
+                ->update(['user_id' => $primaryUser->id]);
+
+            if (Schema::hasTable('push_tokens')) {
+                DB::table('push_tokens')
+                    ->where('user_id', $duplicateUser->id)
+                    ->update(['user_id' => $primaryUser->id]);
+            }
+
+            if (Schema::hasTable('personal_access_tokens')) {
+                DB::table('personal_access_tokens')
+                    ->where('tokenable_type', User::class)
+                    ->where('tokenable_id', $duplicateUser->id)
+                    ->update(['tokenable_id' => $primaryUser->id]);
+            }
+
+            if (Schema::hasTable('user_notifications')) {
+                $notifications = DB::table('user_notifications')
+                    ->where('user_id', $duplicateUser->id)
+                    ->get();
+
+                foreach ($notifications as $notification) {
+                    $duplicateNotification = DB::table('user_notifications')
+                        ->where('user_id', $primaryUser->id)
+                        ->where('source_type', $notification->source_type)
+                        ->where('source_id', $notification->source_id)
+                        ->exists();
+
+                    if ($duplicateNotification) {
+                        DB::table('user_notifications')->where('id', $notification->id)->delete();
+                    } else {
+                        DB::table('user_notifications')
+                            ->where('id', $notification->id)
+                            ->update(['user_id' => $primaryUser->id]);
+                    }
+                }
+            }
+
+            $duplicateUser->delete();
+        }
+
+        return $primaryUser->fresh();
     }
 
     private function emailForUser(?string $email, string $login, ?int $exceptUserId = null): string
