@@ -41,7 +41,7 @@ jobs:
             lsof -ti:8083 | xargs -r kill -9 || true
             rm -f /home/pmsa/apps/bm-expo-8083.log
 
-            runuser -u pmsa -- bash -lc "cd '$MOBILE' && BROWSER=none EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=pm.sa XDG_CACHE_HOME=/home/pmsa/apps/.cache TMPDIR=/home/pmsa/apps/.tmp TMP=/home/pmsa/apps/.tmp TEMP=/home/pmsa/apps/.tmp nohup npx expo start --clear --go --host lan --port 8083 > /home/pmsa/apps/bm-expo-8083.log 2>&1 < /dev/null &"
+            runuser -u pmsa -- bash -lc "cd '$MOBILE' && nohup setsid env BROWSER=none EXPO_NO_TELEMETRY=1 REACT_NATIVE_PACKAGER_HOSTNAME=pm.sa XDG_CACHE_HOME=/home/pmsa/apps/.cache TMPDIR=/home/pmsa/apps/.tmp TMP=/home/pmsa/apps/.tmp TEMP=/home/pmsa/apps/.tmp npx expo start --clear --go --host lan --port 8083 > /home/pmsa/apps/bm-expo-8083.log 2>&1 < /dev/null >/dev/null 2>&1 &"
 
             sleep 6
             lsof -iTCP:8083 -sTCP:LISTEN
