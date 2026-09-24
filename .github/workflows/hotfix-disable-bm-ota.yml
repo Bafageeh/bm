@@ -1,0 +1,37 @@
+name: Hotfix Disable BM OTA
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "bm-api/app/Http/Controllers/Api/UpdateController.php"
+      - ".github/workflows/hotfix-disable-bm-ota.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy OTA hotfix
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 5m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+
+            cd "$ROOT"
+            git fetch origin main
+            git show origin/main:bm-api/app/Http/Controllers/Api/UpdateController.php > /tmp/UpdateController.php
+            install -o pmsa -g pmsa -m 0644 /tmp/UpdateController.php "$API/app/Http/Controllers/Api/UpdateController.php"
+
+            php -l "$API/app/Http/Controllers/Api/UpdateController.php"
+            cd "$API"
+            php artisan optimize:clear
+            echo "BM OTA hotfix deployed."
