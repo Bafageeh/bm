@@ -26,7 +26,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#051836"
-      }
+      },
+      "softwareKeyboardLayoutMode": "resize"
     },
     "extra": {
       "apiUrl": "https://bm.pm.sa/api"
