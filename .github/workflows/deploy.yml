@@ -32,7 +32,7 @@ jobs:
             mkdir -p /home/pmsa/apps/.cache /home/pmsa/apps/.tmp
             chown -R pmsa:pmsa /home/pmsa/apps/.cache /home/pmsa/apps/.tmp
 
-            runuser -u pmsa -- bash -lc "cd '$API' && php -l app/Models/ExpenseAttachment.php && php -l app/Http/Controllers/Api/ExpenseAttachmentController.php && php -l database/migrations/2026_09_24_033500_create_expense_attachments_table.php && php artisan optimize:clear && php artisan migrate --path=database/migrations/2026_09_24_033500_create_expense_attachments_table.php --force && php artisan route:list --path=expense-attachments"
+            runuser -u pmsa -- bash -lc "cd '$API' && php -l app/Models/ExpenseAttachment.php && php -l app/Http/Controllers/Api/ExpenseAttachmentController.php && php -l database/migrations/2026_09_24_033500_create_expense_attachments_table.php && php -l database/migrations/2026_09_24_104300_add_display_name_to_expense_attachments.php && php artisan optimize:clear && php artisan migrate --path=database/migrations/2026_09_24_033500_create_expense_attachments_table.php --force && php artisan migrate --path=database/migrations/2026_09_24_104300_add_display_name_to_expense_attachments.php --force && php artisan route:list --path=expense-attachments"
             runuser -u pmsa -- bash -lc "cd '$MOBILE' && npm install --legacy-peer-deps"
 
             rm -rf /home/pmsa/apps/.tmp/bm-deploy-check
