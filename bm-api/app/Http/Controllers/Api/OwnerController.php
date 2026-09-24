@@ -32,7 +32,7 @@ class OwnerController extends BaseApiController
 
         $data = $this->validateOwner($request);
         $data = $this->normalizeOwnerData($data);
-        $this->assertUniqueOwnerIdentity($data['national_id']);
+        $this->assertUniqueOwnerIdentity($building, $data['national_id']);
         $login = $this->ownerLogin($data);
 
         $owner = DB::transaction(function () use ($building, $data, $login) {
@@ -67,7 +67,7 @@ class OwnerController extends BaseApiController
 
         $data = $this->validateOwner($request);
         $data = $this->normalizeOwnerData($data);
-        $this->assertUniqueOwnerIdentity($data['national_id'], $owner->id, $owner->user_id);
+        $this->assertUniqueOwnerIdentity($building, $data['national_id'], $owner->id);
         $login = $this->ownerLogin($data);
 
         $owner = DB::transaction(function () use ($building, $owner, $data, $login) {
@@ -133,9 +133,9 @@ class OwnerController extends BaseApiController
         }
 
         $this->assertUniqueOwnerIdentity(
+            $building,
             $data['national_id'],
-            $matchedOwner?->id,
-            $matchedOwner?->user_id
+            $matchedOwner?->id
         );
         $login = $this->ownerLogin($data);
 
@@ -275,25 +275,32 @@ class OwnerController extends BaseApiController
         return $data;
     }
 
-    private function assertUniqueOwnerIdentity(string $login, ?int $exceptOwnerId = null, ?int $exceptUserId = null): void
+    private function assertUniqueOwnerIdentity(Building $building, string $login, ?int $exceptOwnerId = null): void
     {
-        $ownerExists = Owner::query()
+        $ownerExistsInBuilding = Owner::query()
+            ->where('building_id', $building->id)
             ->where('national_id', $login)
             ->when($exceptOwnerId, fn ($query) => $query->whereKeyNot($exceptOwnerId))
             ->exists();
 
-        $userExists = User::query()
+        if ($ownerExistsInBuilding) {
+            throw ValidationException::withMessages([
+                'national_id' => ['رقم الهوية مرتبط بمالك موجود مسبقًا في هذا المبنى.'],
+            ]);
+        }
+
+        $managerUsesIdentity = User::query()
+            ->where('role', '<>', 'owner')
             ->where(function ($query) use ($login) {
                 $query->where('username', $login)
                     ->orWhere('phone', $login)
                     ->orWhere('email', $login);
             })
-            ->when($exceptUserId, fn ($query) => $query->whereKeyNot($exceptUserId))
             ->exists();
 
-        if ($ownerExists || $userExists) {
+        if ($managerUsesIdentity) {
             throw ValidationException::withMessages([
-                'national_id' => ['رقم الهوية أو اسم الدخول مستخدم مسبقًا ولا يمكن تكراره.'],
+                'national_id' => ['رقم الهوية أو اسم الدخول مستخدم لحساب مدير. استخدم رقمًا مختلفًا للمالك.'],
             ]);
         }
     }
@@ -356,37 +363,42 @@ class OwnerController extends BaseApiController
     {
         $currentUser = $currentUserId ? User::find($currentUserId) : null;
 
+        $profileUser = Owner::query()
+            ->where('national_id', $login)
+            ->whereNotNull('user_id')
+            ->with('user')
+            ->first()?->user;
+
         $loginUser = User::query()
-            ->where(function ($query) use ($login) {
-                $query->where('username', $login)
-                    ->orWhere('phone', $login)
-                    ->orWhere('email', $login);
-            })
+            ->where('username', $login)
             ->first();
 
-        $user = $currentUser ?: $loginUser;
+        $phoneUser = $data['phone']
+            ? User::query()->where('phone', $data['phone'])->first()
+            : null;
 
-        if ($loginUser && $currentUser && (int) $loginUser->id !== (int) $currentUser->id) {
-            if (! $loginUser->isOwner()) {
-                throw ValidationException::withMessages([
-                    'national_id' => ['رقم الهوية مستخدم لحساب مدير. استخدم رقم هوية مختلف للمالك.'],
-                ]);
-            }
+        $candidates = collect([$currentUser, $profileUser, $loginUser, $phoneUser])
+            ->filter()
+            ->unique('id')
+            ->values();
 
+        if ($candidates->contains(fn ($candidate) => ! $candidate->isOwner())) {
             throw ValidationException::withMessages([
-                'national_id' => ['رقم الهوية مستخدم لمالك آخر.'],
+                'national_id' => ['رقم الهوية أو رقم الجوال مستخدم لحساب مدير. استخدم بيانات مختلفة للمالك.'],
             ]);
         }
 
-        if ($loginUser && ! $currentUser) {
+        if ($candidates->count() > 1) {
             throw ValidationException::withMessages([
-                'national_id' => ['رقم الهوية أو اسم الدخول مستخدم مسبقًا ولا يمكن تكراره.'],
+                'national_id' => ['رقم الهوية ورقم الجوال مرتبطان بحسابين مختلفين. تحقق من بيانات المالك.'],
             ]);
         }
 
-        if ($user && ! $user->isOwner()) {
+        $user = $candidates->first();
+
+        if ($user && $phoneUser && ! $profileUser && ! $loginUser && $user->username && $user->username !== $login) {
             throw ValidationException::withMessages([
-                'national_id' => ['رقم الهوية أو اسم الدخول مستخدم لحساب مدير. استخدم رقم هوية مختلف للمالك.'],
+                'national_id' => ['رقم الجوال مرتبط بمالك له رقم هوية مختلف. تحقق من رقم الهوية.'],
             ]);
         }
 
