@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends BaseApiController
@@ -66,21 +65,57 @@ class AuthController extends BaseApiController
         $user = $request->user();
 
         $data = $request->validate([
-            'username' => ['required', 'string', 'max:255', Rule::unique('users', 'username')->ignore($user->id)],
-            'phone' => ['nullable', 'string', 'max:50', Rule::unique('users', 'phone')->ignore($user->id)],
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'username' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:255'],
         ], [
             'username.required' => 'أدخل اسم المستخدم.',
-            'username.unique' => 'اسم المستخدم مستخدم لحساب آخر.',
-            'phone.unique' => 'رقم الجوال مستخدم لحساب آخر.',
             'email.email' => 'أدخل بريدًا إلكترونيًا صحيحًا.',
-            'email.unique' => 'البريد الإلكتروني مستخدم لحساب آخر.',
         ]);
 
+        $username = trim($data['username']);
+        $phone = $this->nullableTrim($data['phone'] ?? null);
+        $email = $this->nullableTrim($data['email'] ?? null);
+
+        $conflicts = [];
+
+        if ($username !== (string) $user->username && User::where('username', $username)->whereKeyNot($user->id)->exists()) {
+            $conflicts['username'] = ['اسم المستخدم مستخدم لحساب آخر.'];
+        }
+
+        if ($phone !== $user->phone && $phone && User::where('phone', $phone)->whereKeyNot($user->id)->exists()) {
+            $conflicts['phone'] = ['رقم الجوال مستخدم لحساب آخر.'];
+        }
+
+        if ($email !== $user->email && $email && User::where('email', $email)->whereKeyNot($user->id)->exists()) {
+            $conflicts['email'] = ['البريد الإلكتروني مستخدم لحساب آخر.'];
+        }
+
+        if ($conflicts) {
+            throw ValidationException::withMessages($conflicts);
+        }
+
+        if ($user->isOwner()) {
+            $identityNationalIds = $this->ownerIdentityNationalIds($user);
+            $ownerQuery = \App\Models\Owner::query();
+
+            if ($identityNationalIds->isNotEmpty()) {
+                $ownerQuery->whereIn('national_id', $identityNationalIds->all());
+            } else {
+                $ownerQuery->where('user_id', $user->id);
+            }
+
+            $ownerQuery->update([
+                'national_id' => $username,
+                'phone' => $phone,
+                'email' => $email,
+            ]);
+        }
+
         $user->forceFill([
-            'username' => trim($data['username']),
-            'phone' => $this->nullableTrim($data['phone'] ?? null),
-            'email' => $this->nullableTrim($data['email'] ?? null),
+            'username' => $username,
+            'phone' => $phone,
+            'email' => $email,
         ])->save();
 
         return [
@@ -123,6 +158,17 @@ class AuthController extends BaseApiController
         return ['message' => 'تم تسجيل الخروج بنجاح.'];
     }
 
+    private function ownerIdentityNationalIds(User $user)
+    {
+        return $user->ownerProfiles()
+            ->whereNotNull('national_id')
+            ->pluck('national_id')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
     private function nullableTrim($value): ?string
     {
         $value = trim((string) ($value ?? ''));
@@ -155,7 +201,13 @@ class AuthController extends BaseApiController
             : $user->managedBuildings()->orderBy('name')->get();
 
         if ($user->isOwner()) {
-            $buildings = $user->ownerProfiles()->with('building')->get()->pluck('building')->filter()->unique('id')->values();
+            $nationalIds = $this->ownerIdentityNationalIds($user);
+            $profiles = \App\Models\Owner::query()
+                ->with('building')
+                ->when($nationalIds->isNotEmpty(), fn ($query) => $query->whereIn('national_id', $nationalIds->all()), fn ($query) => $query->where('user_id', $user->id))
+                ->get();
+
+            $buildings = $profiles->pluck('building')->filter()->unique('id')->values();
         }
 
         return [
