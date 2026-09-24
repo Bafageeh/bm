@@ -431,7 +431,7 @@ function DatePickerField({ label, value, onChange, placeholder = 'اضغط لا�
 function LoginScreen({ onLogin }) {
   const [login, setLogin] = useState('manager'); const [password, setPassword] = useState('123456'); const [loading, setLoading] = useState(false);
   const submit = async () => { try { setLoading(true); const data = await request('/login', { method: 'POST', body: JSON.stringify({ login, password }) }); await SecureStore.setItemAsync('bm_token', data.token); onLogin(data.token, data.user); } catch (e) { Alert.alert('تعذر تسجيل الدخول', e.message); } finally { setLoading(false); } };
-  return <SafeAreaView style={styles.loginContainer}><StatusBar style="dark" /><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.loginContent}><ScreenCode code="#S-001" /><View style={styles.logoCircle}><MaterialCommunityIcons name="office-building-cog" size={54} color="#0f766e" /></View><Text style={styles.appName}>إدارة اتحاد الملاك</Text><Text style={styles.subtitle}>مصروفات المبنى، دفعات الملاك، والرصيد في شاشة سهلة وواضحة</Text><View style={styles.loginCard}><Field label="اسم المستخدم أو الجوال" value={login} onChangeText={setLogin} placeholder="مثال: manager" /><Field label="كلمة المرور" value={password} onChangeText={setPassword} placeholder="••••••" secureTextEntry /><PrimaryButton title="دخول" icon="log-in-outline" onPress={submit} loading={loading} /></View></KeyboardAvoidingView></SafeAreaView>;
+  return <SafeAreaView style={styles.loginContainer}><StatusBar style="dark" /><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex1} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}><ScrollView contentContainerStyle={styles.loginContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}><ScreenCode code="#S-001" /><View style={styles.logoCircle}><MaterialCommunityIcons name="office-building-cog" size={54} color="#0f766e" /></View><Text style={styles.appName}>إدارة اتحاد الملاك</Text><Text style={styles.subtitle}>مصروفات المبنى، دفعات الملاك، والرصيد في شاشة سهلة وواضحة</Text><View style={styles.loginCard}><Field label="اسم المستخدم أو الجوال" value={login} onChangeText={setLogin} placeholder="مثال: manager" /><Field label="كلمة المرور" value={password} onChangeText={setPassword} placeholder="••••••" secureTextEntry /><PrimaryButton title="دخول" icon="log-in-outline" onPress={submit} loading={loading} /></View></ScrollView></KeyboardAvoidingView></SafeAreaView>;
 }
 function BuildingPicker({ token, user, onSelect, onBuildingsChanged }) {
   const canManage = user?.role === 'admin' || user?.role === 'manager';
@@ -580,7 +580,7 @@ function BuildingPicker({ token, user, onSelect, onBuildingsChanged }) {
     />
 
     <Modal visible={formVisible} transparent animationType="fade" onRequestClose={() => setFormVisible(false)}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
         <Pressable style={styles.modalBackdrop} onPress={() => setFormVisible(false)} />
         <View style={styles.floatingFormCard}>
           <View style={styles.floatingFormHeader}>
@@ -1117,7 +1117,7 @@ function ExpenseTypeFormModal({ visible, onClose, categories, activeCategoryName
   const selectedLabel = selection === '__other__' ? 'أخرى' : selection || 'اختر نوع الصرف';
 
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
       <Pressable style={styles.modalBackdrop} onPress={onClose} />
       <View style={styles.floatingFormCard}>
         <View style={styles.floatingFormHeader}>
@@ -1159,7 +1159,7 @@ function ExpenseTypeFormModal({ visible, onClose, categories, activeCategoryName
 
 function ExpenseFormModal({ visible, onClose, title, categories, category, setCategory, categoryLocked = false, amount, setAmount, dateValue, setDateValue, description, setDescription, attachments = [], existingAttachments = [], onPickAttachments, onRemoveAttachment, onRenameAttachment, onSave, loading, saveTitle }) {
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
       <Pressable style={styles.modalBackdrop} onPress={onClose} />
       <View style={styles.floatingFormCard}>
         <View style={styles.floatingFormHeader}>
@@ -1462,7 +1462,7 @@ function OwnersScreen({ token, buildingId, apartments, expenses, payments, reloa
     </ScrollView>
 
     <Modal visible={ownerFormVisible} transparent animationType="fade" onRequestClose={resetForm}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
         <Pressable style={styles.modalBackdrop} onPress={resetForm} />
         <View style={styles.floatingFormCard}>
           <View style={styles.floatingFormHeader}>
@@ -1491,7 +1491,7 @@ function OwnersScreen({ token, buildingId, apartments, expenses, payments, reloa
     </Modal>
 
     <Modal visible={paymentsVisible} transparent animationType="fade" onRequestClose={closePayments}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
         <Pressable style={styles.modalBackdrop} onPress={closePayments} />
         <View style={styles.floatingFormCard}>
           <View style={styles.floatingFormHeader}>
@@ -1913,7 +1913,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' }, screenWrapper: { flex: 1, backgroundColor: '#f8fafc' }, loginContainer: { flex: 1, backgroundColor: '#ecfdf5' }, loginContent: { flex: 1, padding: 22, justifyContent: 'center' }, logoCircle: { width: 98, height: 98, borderRadius: 49, backgroundColor: '#fff', alignSelf: 'center', justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 }, appName: { fontSize: 27, fontWeight: '900', textAlign: 'center', color: '#0f172a' }, subtitle: { fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8, lineHeight: 23 }, loginCard: { backgroundColor: '#fff', borderRadius: 24, padding: 18, marginTop: 24, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
+  container: { flex: 1, backgroundColor: '#f8fafc' }, screenWrapper: { flex: 1, backgroundColor: '#f8fafc' }, loginContainer: { flex: 1, backgroundColor: '#ecfdf5' }, loginContent: { flexGrow: 1, padding: 22, paddingBottom: 36, justifyContent: 'center' }, logoCircle: { width: 98, height: 98, borderRadius: 49, backgroundColor: '#fff', alignSelf: 'center', justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 }, appName: { fontSize: 27, fontWeight: '900', textAlign: 'center', color: '#0f172a' }, subtitle: { fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8, lineHeight: 23 }, loginCard: { backgroundColor: '#fff', borderRadius: 24, padding: 18, marginTop: 24, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
   notificationCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 18, padding: 12, marginBottom: 9, flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 }, notificationIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: '#f5f3ff', alignItems: 'center', justifyContent: 'center' }, notificationTitle: { color: '#0f172a', fontSize: 14, fontWeight: '900', textAlign: 'right' }, notificationBody: { color: '#475569', fontSize: 13, lineHeight: 21, textAlign: 'right', marginTop: 3 }, notificationDate: { color: '#94a3b8', fontSize: 10, textAlign: 'right', marginTop: 5 },
   field: { marginBottom: 12 }, requiredHint: { color: '#ef4444', fontSize: 11, fontWeight: '800', textAlign: 'right', marginTop: 4 }, label: { color: '#334155', fontSize: 13, fontWeight: '800', textAlign: 'right', marginBottom: 6 }, input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0f172a' }, dateInput: { minHeight: 54, justifyContent: 'center', flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }, dateInputText: { flex: 1, textAlign: 'right', color: '#0f172a', fontWeight: '900' }, datePlaceholder: { color: '#94a3b8' }, textarea: { minHeight: 82, textAlignVertical: 'top' }, button: { height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 8, marginTop: 8 }, button_primary: { backgroundColor: '#0f766e' }, button_light: { backgroundColor: '#ecfdf5' }, buttonText: { color: '#fff', fontWeight: '900', fontSize: 15 }, buttonTextLight: { color: '#0f766e' }, pressed: { opacity: 0.75 },
   header: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', gap: 10 }, headerActions: { flexDirection: 'row', gap: 8 }, circleBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbeafe', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 10, elevation: 3 }, circleBtnLabel: { fontSize: 9, color: '#64748b', fontWeight: '900', marginTop: 1 }, headerTitle: { fontSize: 20, fontWeight: '900', color: '#0f172a', textAlign: 'right' }, headerSubtitle: { fontSize: 12, color: '#64748b', textAlign: 'right', marginTop: 2 }, flex1: { flex: 1 },
