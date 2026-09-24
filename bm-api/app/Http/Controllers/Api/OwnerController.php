@@ -396,7 +396,7 @@ class OwnerController extends BaseApiController
             $user = $this->mergeOwnerUsers($candidates, $primaryUser);
         }
 
-        if ($user && $phoneUser && ! $profileUser && ! $loginUser && $user->username && $user->username !== $login) {
+        if (! $currentUser && $user && $phoneUser && ! $profileUser && ! $loginUser && $user->username && $user->username !== $login) {
             throw ValidationException::withMessages([
                 'national_id' => ['رقم الجوال مرتبط بمالك له رقم هوية مختلف. تحقق من رقم الهوية.'],
             ]);
