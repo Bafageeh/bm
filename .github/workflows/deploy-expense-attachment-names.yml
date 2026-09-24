@@ -1,0 +1,48 @@
+name: Deploy expense attachment names
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "bm-api/app/Models/ExpenseAttachment.php"
+      - "bm-api/app/Http/Controllers/Api/ExpenseAttachmentController.php"
+      - "bm-api/database/migrations/2026_09_24_104300_add_display_name_to_expense_attachments.php"
+      - ".github/workflows/deploy-expense-attachment-names.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy attachment names backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 5m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+
+            cd "$ROOT"
+            git fetch origin main
+
+            for file in               app/Models/ExpenseAttachment.php               app/Http/Controllers/Api/ExpenseAttachmentController.php               database/migrations/2026_09_24_104300_add_display_name_to_expense_attachments.php
+            do
+              git show "origin/main:bm-api/$file" > "/tmp/bm-$(basename "$file")"
+              install -o pmsa -g pmsa -m 0644 "/tmp/bm-$(basename "$file")" "$API/$file"
+            done
+
+            php -l "$API/app/Models/ExpenseAttachment.php"
+            php -l "$API/app/Http/Controllers/Api/ExpenseAttachmentController.php"
+            php -l "$API/database/migrations/2026_09_24_104300_add_display_name_to_expense_attachments.php"
+
+            cd "$API"
+            php artisan optimize:clear
+            php artisan migrate --path=database/migrations/2026_09_24_104300_add_display_name_to_expense_attachments.php --force
+            php artisan migrate:status --path=database/migrations/2026_09_24_104300_add_display_name_to_expense_attachments.php
+            echo "Expense attachment friendly names backend is live."
