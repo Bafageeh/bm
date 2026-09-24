@@ -1553,6 +1553,8 @@ function SettingsLink({ icon, title, text, onPress }) { return <Pressable onPres
 function AdminUsersScreen({ token, setTab }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [buildingFilter, setBuildingFilter] = useState('all');
 
   useEffect(() => {
     request('/admin/users', {}, token)
@@ -1562,12 +1564,10 @@ function AdminUsersScreen({ token, setTab }) {
   }, [token]);
 
   const roleLabel = (role) => role === 'admin' ? 'مدير التطبيق' : role === 'manager' ? 'مدير مبنى' : role === 'owner' ? 'مالك' : role || '-';
-  const admins = (users || []).filter((item) => item.role === 'admin');
-  const managers = (users || []).filter((item) => item.role === 'manager');
-  const owners = (users || []).filter((item) => item.role === 'owner');
+  const roleOrder = { admin: 1, manager: 2, owner: 3 };
   const buildingMap = new Map();
 
-  [...managers, ...owners].forEach((item) => {
+  (users || []).forEach((item) => {
     (item.buildings || []).forEach((building) => {
       if (!building?.id) return;
       if (!buildingMap.has(building.id)) buildingMap.set(building.id, building);
@@ -1575,41 +1575,47 @@ function AdminUsersScreen({ token, setTab }) {
   });
 
   const buildings = Array.from(buildingMap.values()).sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'ar'));
-  const orphanManagers = managers.filter((item) => !(item.buildings || []).length);
-  const orphanOwners = owners.filter((item) => !(item.buildings || []).length);
+  const roleOptions = [
+    { key: 'all', label: 'الكل' },
+    { key: 'admin', label: 'مدير التطبيق' },
+    { key: 'manager', label: 'مدير مبنى' },
+    { key: 'owner', label: 'مالك' },
+  ];
+
+  const filteredUsers = (users || [])
+    .filter((item) => {
+      const roleMatch = roleFilter === 'all' || item.role === roleFilter;
+      const itemBuildings = item.buildings || [];
+      const buildingMatch =
+        buildingFilter === 'all' ||
+        (buildingFilter === 'none' ? itemBuildings.length === 0 : itemBuildings.some((building) => String(building?.id) === String(buildingFilter)));
+      return roleMatch && buildingMatch;
+    })
+    .sort((a, b) => (roleOrder[a.role] || 9) - (roleOrder[b.role] || 9) || String(a?.name || a?.username || '').localeCompare(String(b?.name || b?.username || ''), 'ar'));
+
+  const filterChip = (active, label, onPress) => <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+    <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+  </Pressable>;
 
   const renderPermissions = (item) => <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
     {(item.permissions || []).map((permission, index) => <View key={index} style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 }}><Text style={{ color: '#475569', fontSize: 11, fontWeight: '700' }}>{permission}</Text></View>)}
   </View>;
 
-  const renderUserCard = (item, suffix = '') => <View key={String(item.id) + '-' + suffix} style={[styles.formCard, { marginBottom: 8, padding: 12 }]}>
-    <View style={styles.ownerTop}>
-      <View style={styles.ownerAvatar}><MaterialCommunityIcons name="account-circle-outline" size={24} color="#0f766e" /></View>
-      <View style={styles.flex1}>
-        <Text style={styles.cardTitle}>{item.name || item.username || 'مستخدم'}</Text>
-        <Text style={styles.cardSub}>اسم الدخول: {item.username || '-'}</Text>
-      </View>
-      <View style={[styles.badge, styles.badgeBalanced]}><Text style={styles.badgeText}>{roleLabel(item.role)}</Text></View>
-    </View>
-    <Text style={[styles.settingsText, { marginTop: 8 }]}>الحالة: {item.status === 'active' ? 'نشط' : (item.status || '-')}</Text>
-    {item.role === 'admin' ? <Text style={styles.settingsText}>المباني: جميع المباني</Text> : null}
-    {renderPermissions(item)}
-  </View>;
-
-  const renderBuildingGroup = (building, role, roleTitle) => {
-    const groupUsers = (users || []).filter((item) => item.role === role && (item.buildings || []).some((linked) => linked?.id === building.id));
-    if (!groupUsers.length) return null;
-    return <View key={role + '-' + building.id} style={{ marginBottom: 12 }}>
-      <View style={[styles.formCard, { padding: 10, marginBottom: 8, backgroundColor: '#f8fafc' }]}>
-        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-          <View style={styles.settingsIcon}><Ionicons name="business-outline" size={22} color="#0f766e" /></View>
-          <View style={styles.flex1}>
-            <Text style={styles.settingsTitle}>{building.name}</Text>
-            <Text style={styles.settingsText}>{roleTitle}: {groupUsers.length}</Text>
-          </View>
+  const renderUserCard = (item) => {
+    const buildingNames = (item.buildings || []).map((building) => building?.name).filter(Boolean);
+    return <View key={item.id} style={[styles.formCard, { marginBottom: 8, padding: 12 }]}>
+      <View style={styles.ownerTop}>
+        <View style={styles.ownerAvatar}><MaterialCommunityIcons name="account-circle-outline" size={24} color="#0f766e" /></View>
+        <View style={styles.flex1}>
+          <Text style={styles.cardTitle}>{item.name || item.username || 'مستخدم'}</Text>
+          <Text style={styles.cardSub}>اسم الدخول: {item.username || '-'}</Text>
         </View>
+        <View style={[styles.badge, styles.badgeBalanced]}><Text style={styles.badgeText}>{roleLabel(item.role)}</Text></View>
       </View>
-      {groupUsers.map((item) => renderUserCard(item, role + '-' + building.id))}
+      <Text style={[styles.settingsText, { marginTop: 8 }]}>الحالة: {item.status === 'active' ? 'نشط' : (item.status || '-')}</Text>
+      <Text style={styles.settingsText}>المبنى: {buildingNames.length ? buildingNames.join('، ') : 'غير مرتبط بمبنى'}</Text>
+      <Text style={[styles.settingsTitle, { marginTop: 8, fontSize: 14 }]}>الصلاحيات</Text>
+      {renderPermissions(item)}
     </View>;
   };
 
@@ -1617,39 +1623,38 @@ function AdminUsersScreen({ token, setTab }) {
 
   return <ScrollView contentContainerStyle={styles.screenContent}>
     <SectionTitle icon="people-circle-outline" title="المستخدمون والصلاحيات" />
-    <Text style={styles.settingsHint}>تم توزيع المستخدمين حسب نوع الصلاحية ثم حسب المبنى لتسهيل الوصول إليهم.</Text>
 
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-      <View style={styles.chip}><Text style={styles.chipText}>الكل: {(users || []).length}</Text></View>
-      <View style={styles.chip}><Text style={styles.chipText}>مدير التطبيق: {admins.length}</Text></View>
-      <View style={styles.chip}><Text style={styles.chipText}>مديرو المباني: {managers.length}</Text></View>
-      <View style={styles.chip}><Text style={styles.chipText}>الملاك: {owners.length}</Text></View>
-    </ScrollView>
+    <View style={[styles.formCard, { padding: 12, marginBottom: 12 }]}>
+      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <Ionicons name="filter-outline" size={21} color="#0f766e" />
+        <Text style={styles.settingsTitle}>فلترة المستخدمين</Text>
+      </View>
 
-    {admins.length ? <>
-      <SectionTitle icon="shield-checkmark-outline" title={'مدير التطبيق (' + admins.length + ')'} />
-      {admins.map((item) => renderUserCard(item, 'admin'))}
-    </> : null}
+      <Text style={[styles.label, { marginBottom: 6 }]}>حسب الصلاحية</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+        {roleOptions.map((option) => <View key={option.key}>{filterChip(roleFilter === option.key, option.label, () => setRoleFilter(option.key))}</View>)}
+      </ScrollView>
 
-    {managers.length ? <>
-      <SectionTitle icon="business-outline" title={'مديرو المباني (' + managers.length + ')'} />
-      {buildings.map((building) => renderBuildingGroup(building, 'manager', 'عدد المديرين'))}
-      {orphanManagers.length ? <View style={{ marginBottom: 12 }}>
-        <Text style={[styles.settingsTitle, { marginBottom: 8 }]}>غير مرتبط بمبنى</Text>
-        {orphanManagers.map((item) => renderUserCard(item, 'manager-orphan'))}
-      </View> : null}
-    </> : null}
+      <Text style={[styles.label, { marginTop: 12, marginBottom: 6 }]}>حسب المبنى</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+        <View>{filterChip(buildingFilter === 'all', 'جميع المباني', () => setBuildingFilter('all'))}</View>
+        {buildings.map((building) => <View key={building.id}>{filterChip(String(buildingFilter) === String(building.id), building.name, () => setBuildingFilter(String(building.id)))}</View>)}
+        <View>{filterChip(buildingFilter === 'none', 'غير مرتبط بمبنى', () => setBuildingFilter('none'))}</View>
+      </ScrollView>
 
-    {owners.length ? <>
-      <SectionTitle icon="people-outline" title={'الملاك (' + owners.length + ')'} />
-      {buildings.map((building) => renderBuildingGroup(building, 'owner', 'عدد الملاك'))}
-      {orphanOwners.length ? <View style={{ marginBottom: 12 }}>
-        <Text style={[styles.settingsTitle, { marginBottom: 8 }]}>غير مرتبط بمبنى</Text>
-        {orphanOwners.map((item) => renderUserCard(item, 'owner-orphan'))}
-      </View> : null}
-    </> : null}
+      {(roleFilter !== 'all' || buildingFilter !== 'all') ? <Pressable onPress={() => { setRoleFilter('all'); setBuildingFilter('all'); }} style={({ pressed }) => [{ alignSelf: 'flex-start', marginTop: 12, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 12, backgroundColor: '#f1f5f9' }, pressed && styles.pressed]}>
+        <Text style={{ color: '#475569', fontWeight: '800' }}>مسح الفلاتر</Text>
+      </Pressable> : null}
+    </View>
 
-    {(users || []).length === 0 ? <EmptyState icon="people-outline" title="لا يوجد مستخدمون" text="لا توجد حسابات لعرضها." /> : null}
+    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+      <Text style={styles.settingsTitle}>النتائج</Text>
+      <Text style={styles.settingsText}>{filteredUsers.length} مستخدم</Text>
+    </View>
+
+    {filteredUsers.map(renderUserCard)}
+    {filteredUsers.length === 0 ? <EmptyState icon="search-outline" title="لا توجد نتائج" text="غيّر فلتر الصلاحية أو المبنى لعرض مستخدمين آخرين." /> : null}
+
     <PrimaryButton title="رجوع للإعدادات" icon="arrow-forward-outline" onPress={() => setTab('settings')} variant="light" />
   </ScrollView>;
 }
