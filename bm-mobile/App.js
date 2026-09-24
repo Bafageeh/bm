@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import * as SecureStore from 'expo-secure-store';
 import * as DocumentPicker from 'expo-document-picker';
+import { File as ExpoFile } from 'expo-file-system';
 
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(false);
@@ -617,7 +618,8 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
       if (Platform.OS === 'web' && file.file) {
         formData.append('attachments[]', file.file, name);
       } else {
-        formData.append('attachments[]', { uri: file.uri, name, type });
+        const nativeFile = new ExpoFile(file.uri);
+        formData.append('attachments[]', nativeFile, name);
       }
     });
     await requestFormData(`/buildings/${buildingId}/expenses/${expenseId}/attachments`, formData, token);
