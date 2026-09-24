@@ -4,7 +4,7 @@
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "patch-ui": "node scripts/owner-actions-menu.js && node scripts/add-screen-numbers.js && node scripts/beautify-icons-and-notifications.js && node scripts/fallback-system-icons.js && node scripts/automatic-ota-updates.js",
+    "patch-ui": "node scripts/owner-actions-menu.js && node scripts/add-screen-numbers.js && node scripts/beautify-icons-and-notifications.js && node scripts/fallback-system-icons.js",
     "prestart": "npm run patch-ui",
     "start": "expo start --go",
     "preandroid": "npm run patch-ui",
