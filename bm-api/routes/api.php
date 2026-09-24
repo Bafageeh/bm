@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\BuildingController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExpenseCategoryController;
 use App\Http\Controllers\Api\ExpenseController;
+use App\Http\Controllers\Api\ExpenseAttachmentController;
 use App\Http\Controllers\Api\ManagerRegistrationController;
 use App\Http\Controllers\Api\OwnerController;
 use App\Http\Controllers\Api\PaymentController;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/health', fn () => ['ok' => true, 'app' => 'BM API']);
 Route::get('/updates/manifest', [UpdateController::class, 'manifest']);
 Route::get('/updates/assets', [UpdateController::class, 'asset']);
+Route::get('/expense-attachments/{attachment}/{token}', [ExpenseAttachmentController::class, 'show']);
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/manager-registration/request-otp', [ManagerRegistrationController::class, 'requestOtp']);
@@ -46,6 +48,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/buildings/{building}/expenses', [ExpenseController::class, 'store']);
     Route::put('/buildings/{building}/expenses/{expense}', [ExpenseController::class, 'update']);
     Route::delete('/buildings/{building}/expenses/{expense}', [ExpenseController::class, 'destroy']);
+    Route::post('/buildings/{building}/expenses/{expense}/attachments', [ExpenseAttachmentController::class, 'store']);
+    Route::delete('/buildings/{building}/expenses/{expense}/attachments/{attachment}', [ExpenseAttachmentController::class, 'destroy']);
 
     Route::get('/buildings/{building}/expense-categories', [ExpenseCategoryController::class, 'index']);
     Route::post('/buildings/{building}/expense-categories', [ExpenseCategoryController::class, 'store']);
