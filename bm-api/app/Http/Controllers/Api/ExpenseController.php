@@ -16,6 +16,7 @@ class ExpenseController extends BaseApiController
         $this->assertCanAccessBuilding($request, $building);
 
         $query = $building->expenses()
+            ->with('attachments')
             ->latest('expense_date')
             ->latest('id');
 
@@ -83,6 +84,10 @@ class ExpenseController extends BaseApiController
         $this->assertManagerOrAdmin($request, $building);
         $this->assertExpenseBelongsToBuilding($building, $expense);
 
+        $expense->load('attachments');
+        foreach ($expense->attachments as $attachment) {
+            $attachment->delete();
+        }
         $expense->delete();
 
         return response()->json(['message' => 'تم حذف المصروف']);
@@ -147,8 +152,8 @@ class ExpenseController extends BaseApiController
     private function freshExpense(Expense $expense): Expense
     {
         return Schema::hasTable('expense_owner')
-            ? $expense->fresh(['owners:id,name'])
-            : $expense->fresh();
+            ? $expense->fresh(['owners:id,name', 'attachments'])
+            : $expense->fresh(['attachments']);
     }
 
     private function assertExpenseBelongsToBuilding(Building $building, Expense $expense): void
