@@ -5,7 +5,6 @@ import Svg, { Circle, Ellipse, Line, Path, Polyline, Rect } from 'react-native-s
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import * as SecureStore from 'expo-secure-store';
-import * as DocumentPicker from 'expo-document-picker';
 import { File as ExpoFile } from 'expo-file-system';
 
 I18nManager.allowRTL(true);
@@ -314,7 +313,7 @@ function expenseAttachmentUrl(value) {
 }
 
 function isPdfAttachment(item) {
-  const mime = String(item?.mime_type || item?.mimeType || '').toLowerCase();
+  const mime = String(item?.mime_type || item?.mimeType || item?.type || '').toLowerCase();
   const name = String(item?.original_name || item?.name || '').toLowerCase();
   return mime.includes('pdf') || name.endsWith('.pdf');
 }
@@ -585,14 +584,15 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
 
   const pickExpenseFiles = async (existingFiles, pendingFiles, setPendingFiles) => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/*', 'application/pdf'],
-        multiple: true,
-        copyToCacheDirectory: true,
+      const result = await ExpoFile.pickFileAsync({
+        multipleFiles: true,
+        mimeTypes: ['image/*', 'application/pdf'],
       });
-      if (result.canceled || !result.assets?.length) return;
+      if (result?.canceled || !result?.result) return;
 
-      const picked = result.assets;
+      const picked = Array.isArray(result.result) ? result.result : [result.result];
+      if (!picked.length) return;
+
       const combined = [...(existingFiles || []), ...(pendingFiles || []), ...picked];
       const pdfCount = combined.filter(isPdfAttachment).length;
       const imageCount = combined.length - pdfCount;
@@ -613,13 +613,11 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
     if (!expenseId || !files?.length) return;
     const formData = new FormData();
     files.forEach((file, index) => {
-      const type = file.mimeType || (isPdfAttachment(file) ? 'application/pdf' : 'image/jpeg');
       const name = file.name || `expense-attachment-${index + 1}`;
       if (Platform.OS === 'web' && file.file) {
         formData.append('attachments[]', file.file, name);
       } else {
-        const nativeFile = new ExpoFile(file.uri);
-        formData.append('attachments[]', nativeFile, name);
+        formData.append('attachments[]', file, name);
       }
     });
     await requestFormData(`/buildings/${buildingId}/expenses/${expenseId}/attachments`, formData, token);
