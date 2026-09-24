@@ -434,8 +434,177 @@ function LoginScreen({ onLogin }) {
   const submit = async () => { try { setLoading(true); const data = await request('/login', { method: 'POST', body: JSON.stringify({ login, password }) }); await SecureStore.setItemAsync('bm_token', data.token); onLogin(data.token, data.user); } catch (e) { Alert.alert('تعذر تسجيل الدخول', e.message); } finally { setLoading(false); } };
   return <SafeAreaView style={styles.loginContainer}><StatusBar style="dark" /><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.loginContent}><ScreenCode code="#S-001" /><View style={styles.logoCircle}><MaterialCommunityIcons name="office-building-cog" size={54} color="#0f766e" /></View><Text style={styles.appName}>إدارة اتحاد الملاك</Text><Text style={styles.subtitle}>مصروفات المبنى، دفعات الملاك، والرصيد في شاشة سهلة وواضحة</Text><View style={styles.loginCard}><Field label="اسم المستخدم أو الجوال" value={login} onChangeText={setLogin} placeholder="مثال: manager" /><Field label="كلمة المرور" value={password} onChangeText={setPassword} placeholder="••••••" secureTextEntry /><PrimaryButton title="دخول" icon="log-in-outline" onPress={submit} loading={loading} /></View></KeyboardAvoidingView></SafeAreaView>;
 }
-function BuildingPicker({ user, onSelect, onLogout }) {
-  return <SafeAreaView style={styles.container}><Header title="اختر المبنى" subtitle={`مرحبًا ${user?.name || ''}`} onLogout={onLogout} /><FlatList contentContainerStyle={styles.listContent} data={user?.buildings || []} keyExtractor={(item) => String(item.id)} ListEmptyComponent={<EmptyState icon="business-outline" title="لا توجد مبانٍ" text="لم يتم ربط حسابك بأي مبنى بعد." />} renderItem={({ item }) => <Pressable style={styles.buildingCard} onPress={() => onSelect(item)}><View style={styles.buildingIcon}><Ionicons name="business" size={28} color="#0f766e" /></View><View style={styles.flex1}><Text style={styles.cardTitle}>{item.name}</Text><Text style={styles.cardSub}>{displayTextDates([item.city, item.district].filter(Boolean).join(' - ') || 'بدون موقع')}</Text></View><Ionicons name="chevron-back" size={22} color="#64748b" /></Pressable>} /></SafeAreaView>;
+function BuildingPicker({ token, user, onSelect, onLogout, onBuildingsChanged }) {
+  const canManage = user?.role === 'admin' || user?.role === 'manager';
+  const [buildings, setBuildings] = useState(user?.buildings || []);
+  const [loadingBuildings, setLoadingBuildings] = useState(false);
+  const [formVisible, setFormVisible] = useState(false);
+  const [editingBuilding, setEditingBuilding] = useState(null);
+  const [name, setName] = useState('');
+  const [city, setCity] = useState('');
+  const [district, setDistrict] = useState('');
+  const [address, setAddress] = useState('');
+  const [apartmentCount, setApartmentCount] = useState('0');
+  const [annualCycleStartsOn, setAnnualCycleStartsOn] = useState(todayDate());
+  const [saving, setSaving] = useState(false);
+
+  const loadBuildings = async () => {
+    if (!token) return;
+    try {
+      setLoadingBuildings(true);
+      const data = await request('/buildings', {}, token);
+      const next = data?.data || [];
+      setBuildings(next);
+      onBuildingsChanged?.(next);
+    } catch (error) {
+      Alert.alert('تعذر تحميل المباني', error.message);
+    } finally {
+      setLoadingBuildings(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBuildings();
+  }, [token]);
+
+  const resetForm = () => {
+    setEditingBuilding(null);
+    setName('');
+    setCity('');
+    setDistrict('');
+    setAddress('');
+    setApartmentCount('0');
+    setAnnualCycleStartsOn(todayDate());
+  };
+
+  const openAdd = () => {
+    resetForm();
+    setFormVisible(true);
+  };
+
+  const openEdit = (item) => {
+    setEditingBuilding(item);
+    setName(item?.name || '');
+    setCity(item?.city || '');
+    setDistrict(item?.district || '');
+    setAddress(item?.address || '');
+    setApartmentCount(String(item?.apartments_count ?? 0));
+    setAnnualCycleStartsOn(normalizeDateForApi(item?.annual_cycle_starts_on || todayDate()));
+    setFormVisible(true);
+  };
+
+  const saveBuilding = async () => {
+    const nextName = String(name || '').trim();
+    const count = Number(apartmentCount);
+    if (!nextName) return Alert.alert('تنبيه', 'أدخل اسم المبنى');
+    if (!Number.isInteger(count) || count < 0) return Alert.alert('تنبيه', 'أدخل عدد الشقق بشكل صحيح');
+
+    try {
+      setSaving(true);
+      const payload = {
+        name: nextName,
+        city: String(city || '').trim() || null,
+        district: String(district || '').trim() || null,
+        address: String(address || '').trim() || null,
+        apartment_count: count,
+        annual_cycle_starts_on: normalizeDateForApi(annualCycleStartsOn) || null,
+      };
+      await request(
+        editingBuilding ? `/buildings/${editingBuilding.id}` : '/buildings',
+        { method: editingBuilding ? 'PUT' : 'POST', body: JSON.stringify(payload) },
+        token
+      );
+      setFormVisible(false);
+      resetForm();
+      await loadBuildings();
+    } catch (error) {
+      Alert.alert(editingBuilding ? 'تعذر تعديل المبنى' : 'تعذر إضافة المبنى', error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteBuilding = (item) => {
+    Alert.alert(
+      'حذف المبنى',
+      `هل أنت متأكد من حذف "${item.name}"؟ سيتم حذف بيانات المبنى المرتبطة به من شقق وملاك ومصروفات ودفعات، ولا يمكن التراجع عن ذلك.`,
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'حذف نهائي',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await request(`/buildings/${item.id}`, { method: 'DELETE' }, token);
+              await loadBuildings();
+            } catch (error) {
+              Alert.alert('تعذر حذف المبنى', error.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return <SafeAreaView style={styles.container}>
+    <Header title="اختر المبنى" subtitle={`مرحبًا ${user?.name || ''}`} onLogout={onLogout} />
+    <FlatList
+      contentContainerStyle={styles.buildingsListContent}
+      data={buildings}
+      keyExtractor={(item) => String(item.id)}
+      ListHeaderComponent={canManage ? <Pressable onPress={openAdd} style={({ pressed }) => [styles.buildingAddButton, pressed && styles.pressed]}>
+        <Ionicons name="add" size={24} color="#fff" />
+        <Text style={styles.buildingAddButtonText}>إضافة مبنى</Text>
+      </Pressable> : null}
+      ListEmptyComponent={loadingBuildings ? <LoadingScreen /> : <EmptyState icon="business-outline" title="لا توجد مبانٍ" text="أضف أول مبنى للبدء، وستكون بيانات كل مبنى مستقلة عن المباني الأخرى." />}
+      renderItem={({ item }) => <View style={styles.buildingManageCard}>
+        <Pressable style={({ pressed }) => [styles.buildingCard, pressed && styles.pressed]} onPress={() => onSelect(item)}>
+          <View style={styles.buildingIcon}><Ionicons name="business" size={28} color="#0f766e" /></View>
+          <View style={styles.flex1}>
+            <Text style={styles.cardTitle}>{item.name}</Text>
+            <Text style={styles.cardSub}>{displayTextDates([item.city, item.district].filter(Boolean).join(' - ') || 'بدون موقع')}</Text>
+            <Text style={styles.buildingMetaText}>الشقق: {item.apartments_count ?? 0} · الملاك: {item.owners_count ?? 0}</Text>
+          </View>
+          <Ionicons name="chevron-back" size={22} color="#64748b" />
+        </Pressable>
+        {canManage ? <View style={styles.buildingActionsRow}>
+          <Pressable onPress={() => openEdit(item)} style={({ pressed }) => [styles.buildingEditButton, pressed && styles.pressed]}>
+            <Ionicons name="create-outline" size={18} color="#0f766e" />
+            <Text style={styles.buildingEditButtonText}>تعديل</Text>
+          </Pressable>
+          <Pressable onPress={() => deleteBuilding(item)} style={({ pressed }) => [styles.buildingDeleteButton, pressed && styles.pressed]}>
+            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+            <Text style={styles.buildingDeleteButtonText}>حذف</Text>
+          </Pressable>
+        </View> : null}
+      </View>}
+    />
+
+    <Modal visible={formVisible} transparent animationType="fade" onRequestClose={() => setFormVisible(false)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setFormVisible(false)} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={() => setFormVisible(false)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>{editingBuilding ? 'تعديل المبنى' : 'إضافة مبنى'}</Text>
+              <Text style={styles.ownerMeta}>كل بيانات وحسابات هذا المبنى ستكون مستقلة عن بقية المباني</Text>
+            </View>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            <Field label="اسم المبنى" value={name} onChangeText={setName} placeholder="مثال: مبنى الورود 12" />
+            <Field label="المدينة" value={city} onChangeText={setCity} placeholder="مثال: جدة" />
+            <Field label="الحي" value={district} onChangeText={setDistrict} placeholder="مثال: الصفا" />
+            <Field label="العنوان" value={address} onChangeText={setAddress} placeholder="العنوان التفصيلي - اختياري" />
+            <Field label="عدد الشقق" value={apartmentCount} onChangeText={setApartmentCount} keyboardType="numeric" placeholder="0" />
+            <DatePickerField label="بداية الدورة السنوية" value={annualCycleStartsOn} onChange={setAnnualCycleStartsOn} />
+            <PrimaryButton title={editingBuilding ? 'حفظ التعديل' : 'إضافة المبنى'} icon="save-outline" onPress={saveBuilding} loading={saving} />
+            <PrimaryButton title="إلغاء" icon="close-outline" onPress={() => setFormVisible(false)} variant="light" />
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  </SafeAreaView>;
 }
 function Dashboard({ dashboard }) {
   const stats = dashboard?.stats || {};
@@ -1379,7 +1548,7 @@ function PaymentsScreen({ token, buildingId, owners, payments, reload, initialOw
   const add = async () => { const apiDate = normalizeDateForApi(paymentDate); if (!ownerId) return Alert.alert('تنبيه', 'اختر المالك'); if (!amount) return Alert.alert('تنبيه', 'أدخل مبلغ الدفعة'); try { setLoading(true); await request(`/buildings/${buildingId}/payments`, { method: 'POST', body: JSON.stringify({ owner_id: ownerId, amount: Number(amount), payment_date: apiDate, method: 'تحويل', notes }) }, token); setAmount(''); setPaymentDate(todayDate()); setNotes(''); await reload(); } catch (e) { Alert.alert('تعذر إضافة الدفعة', e.message); } finally { setLoading(false); } };
   return <ScrollView contentContainerStyle={styles.screenContent}><SectionTitle icon="card-outline" title="تسجيل دفعة مالك" /><View style={styles.formCard}><Text style={styles.label}>المالك</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>{(owners || []).map((owner) => <Pressable key={owner.id} onPress={() => setOwnerId(owner.id)} style={[styles.chip, ownerId === owner.id && styles.chipActive]}><Text style={[styles.chipText, ownerId === owner.id && styles.chipTextActive]}>{owner.name}</Text></Pressable>)}</ScrollView><Field label="المبلغ" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" /><DatePickerField label="تاريخ الدفعة" value={paymentDate} onChange={setPaymentDate} /><Field label="ملاحظة" value={notes} onChangeText={setNotes} placeholder="ملاحظة اختيارية" multiline /><PrimaryButton title="حفظ الدفعة" icon="save-outline" onPress={add} loading={loading} /></View><SectionTitle icon="wallet-outline" title="آخر الدفعات" />{(payments || []).map((item) => <View key={item.id} style={styles.rowCard}><View style={styles.rowIcon}><Ionicons name="wallet" size={20} color="#0f766e" /></View><View style={styles.flex1}><Text style={styles.cardTitle}>{item.owner?.name || 'مالك'}</Text><Text style={styles.cardSub}>{displayDate(item.payment_date)} - {displayTextDates(item.notes || item.method) || 'دفعة'}</Text></View><Text style={styles.amountText}>{money(item.amount)}</Text></View>)}</ScrollView>;
 }
-function SettingsScreen({ dashboard, setTab, user }) { const count = dashboard?.stats?.apartment_count || 0; const cycle = displayDate(dashboard?.building?.annual_cycle_starts_on, 'غير محدد'); return <ScrollView contentContainerStyle={styles.screenContent}><ScreenCode code="#S-005" /><SectionTitle icon="settings-outline" title="الإعدادات" /><Text style={styles.settingsHint}>روابط التحكم الرئيسية للمبنى.</Text><SettingsLink icon="people-outline" title="بيانات الشقق والملاك" text="الشقق مجهزة حسب عددها في إعدادات المبنى، ويمكن تعديل بيانات كل شقة ومالكها." onPress={() => setTab('owners')} /><SettingsLink icon="receipt-outline" title="التحكم بالمصروفات" text="إضافة المصروفات ومتابعة مصروفات المبنى" onPress={() => setTab('expenses')} />{user?.role === 'admin' ? <SettingsLink icon="pricetags-outline" title="الأنواع الأساسية للصرف" text="إضافة وتعديل أنواع الصرف الأساسية للـ admin" onPress={() => setTab('expenseCategories')} /> : null}<SettingsLink icon="business-outline" title="إعدادات المبنى" text={`عدد الشقق: ${count} - بداية الدورة: ${cycle}`} onPress={() => setTab('buildingSettings')} /></ScrollView>; }
+function SettingsScreen({ dashboard, setTab, user, onManageBuildings }) { const count = dashboard?.stats?.apartment_count || 0; const cycle = displayDate(dashboard?.building?.annual_cycle_starts_on, 'غير محدد'); return <ScrollView contentContainerStyle={styles.screenContent}><ScreenCode code="#S-005" /><SectionTitle icon="settings-outline" title="الإعدادات" /><Text style={styles.settingsHint}>روابط التحكم الرئيسية للمبنى.</Text><SettingsLink icon="business-outline" title="المباني" text="التنقل بين المباني وإضافة وتعديل وحذف المباني، مع فصل كامل لبيانات كل مبنى." onPress={onManageBuildings} /><SettingsLink icon="people-outline" title="بيانات الشقق والملاك" text="الشقق مجهزة حسب عددها في إعدادات المبنى، ويمكن تعديل بيانات كل شقة ومالكها." onPress={() => setTab('owners')} /><SettingsLink icon="receipt-outline" title="التحكم بالمصروفات" text="إضافة المصروفات ومتابعة مصروفات المبنى" onPress={() => setTab('expenses')} />{user?.role === 'admin' ? <SettingsLink icon="pricetags-outline" title="الأنواع الأساسية للصرف" text="إضافة وتعديل أنواع الصرف الأساسية للـ admin" onPress={() => setTab('expenseCategories')} /> : null}<SettingsLink icon="business-outline" title="إعدادات المبنى" text={`عدد الشقق: ${count} - بداية الدورة: ${cycle}`} onPress={() => setTab('buildingSettings')} /></ScrollView>; }
 function SettingsLink({ icon, title, text, onPress }) { return <Pressable onPress={onPress} style={({ pressed }) => [styles.settingsLink, pressed && styles.pressed]}><View style={styles.settingsIcon}><Ionicons name={icon} size={24} color="#0f766e" /></View><View style={styles.flex1}><Text style={styles.settingsTitle}>{title}</Text><Text style={styles.settingsText}>{displayTextDates(text)}</Text></View><Ionicons name="chevron-back" size={22} color="#64748b" /></Pressable>; }
 function BuildingSettingsScreen({ token, buildingId, dashboard, reload, setTab }) {
   const [buildingName, setBuildingName] = useState(dashboard?.building?.name || ''); const [apartmentCount, setApartmentCount] = useState(String(dashboard?.stats?.apartment_count || '')); const [annualCycleStartsOn, setAnnualCycleStartsOn] = useState(normalizeDateForApi(dashboard?.building?.annual_cycle_starts_on || todayDate())); const [loading, setLoading] = useState(false);
@@ -1389,7 +1558,7 @@ function BuildingSettingsScreen({ token, buildingId, dashboard, reload, setTab }
 }
 function OwnerOnlyScreen({ token }) { const [data, setData] = useState(null); const [loading, setLoading] = useState(true); useEffect(() => { request('/owner/dashboard', {}, token).then(setData).catch((e) => Alert.alert('خطأ', e.message)).finally(() => setLoading(false)); }, [token]); if (loading) return <LoadingScreen />; const profile = data?.owners?.[0]; if (!profile) return <EmptyState icon="home-outline" title="لا توجد بيانات" text="لم يتم ربط حسابك بمالك بعد." />; return <ScrollView contentContainerStyle={styles.screenContent}><ScreenCode code="#S-012" /><Dashboard dashboard={{ building: profile.building, stats: {}, owners: [profile.summary] }} /><SectionTitle icon="receipt-outline" title="تفصيل نصيبك من المصروفات" />{(profile.expenses || []).map((item) => <ExpenseRow key={item.id} item={{ ...item, amount: item.owner_share }} />)}</ScrollView>; }
 function LoadingScreen() { return <View style={styles.loading}><ActivityIndicator color="#0f766e" size="large" /><Text style={styles.loadingText}>جاري التحميل...</Text></View>; }
-function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async (options = {}) => { if (!selectedBuilding) return; const silent = options?.silent === true; if (!silent) setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { if (!silent) setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} expenses={expenses} payments={payments} reload={reload} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
+function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async (options = {}) => { if (!selectedBuilding) return; const silent = options?.silent === true; if (!silent) setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { if (!silent) setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} expenses={expenses} payments={payments} reload={reload} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} onManageBuildings={() => setSelectedBuilding(null)} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
 function TabButton({ active, icon, title, onPress }) { return <Pressable onPress={onPress} style={styles.tabBtn}><Ionicons name={icon} size={21} color={active ? '#0f766e' : '#94a3b8'} /><Text style={[styles.tabText, active && styles.tabTextActive]}>{title}</Text></Pressable>; }
 export default function App() {
   const [token, setToken] = useState(null);
@@ -1438,7 +1607,7 @@ export default function App() {
           if (nextUser?.buildings?.length === 1) setSelectedBuilding(nextUser.buildings[0]);
         }} />
       : !selectedBuilding && user?.role !== 'owner'
-        ? <BuildingPicker user={user} onSelect={setSelectedBuilding} onLogout={logout} />
+        ? <BuildingPicker token={token} user={user} onSelect={setSelectedBuilding} onLogout={logout} onBuildingsChanged={(nextBuildings) => setUser((current) => current ? { ...current, buildings: nextBuildings } : current)} />
         : <AppShell token={token} user={user} selectedBuilding={selectedBuilding} setSelectedBuilding={setSelectedBuilding} onLogout={logout} />}
   </SafeAreaProvider>;
 }
@@ -1448,7 +1617,7 @@ const styles = StyleSheet.create({
   notificationCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 18, padding: 12, marginBottom: 9, flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 }, notificationIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: '#f5f3ff', alignItems: 'center', justifyContent: 'center' }, notificationTitle: { color: '#0f172a', fontSize: 14, fontWeight: '900', textAlign: 'right' }, notificationBody: { color: '#475569', fontSize: 13, lineHeight: 21, textAlign: 'right', marginTop: 3 }, notificationDate: { color: '#94a3b8', fontSize: 10, textAlign: 'right', marginTop: 5 },
   field: { marginBottom: 12 }, requiredHint: { color: '#ef4444', fontSize: 11, fontWeight: '800', textAlign: 'right', marginTop: 4 }, label: { color: '#334155', fontSize: 13, fontWeight: '800', textAlign: 'right', marginBottom: 6 }, input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0f172a' }, dateInput: { minHeight: 54, justifyContent: 'center', flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }, dateInputText: { flex: 1, textAlign: 'right', color: '#0f172a', fontWeight: '900' }, datePlaceholder: { color: '#94a3b8' }, textarea: { minHeight: 82, textAlignVertical: 'top' }, button: { height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 8, marginTop: 8 }, button_primary: { backgroundColor: '#0f766e' }, button_light: { backgroundColor: '#ecfdf5' }, buttonText: { color: '#fff', fontWeight: '900', fontSize: 15 }, buttonTextLight: { color: '#0f766e' }, pressed: { opacity: 0.75 },
   header: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', gap: 10 }, headerActions: { flexDirection: 'row', gap: 8 }, circleBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbeafe', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 10, elevation: 3 }, circleBtnLabel: { fontSize: 9, color: '#64748b', fontWeight: '900', marginTop: 1 }, headerTitle: { fontSize: 20, fontWeight: '900', color: '#0f172a', textAlign: 'right' }, headerSubtitle: { fontSize: 12, color: '#64748b', textAlign: 'right', marginTop: 2 }, flex1: { flex: 1 },
-  listContent: { padding: 16, gap: 12 }, buildingCard: { backgroundColor: '#fff', padding: 16, borderRadius: 22, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, shadowColor: '#0f172a', shadowOpacity: 0.04, shadowRadius: 12, elevation: 2 }, buildingIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: '#ecfdf5', justifyContent: 'center', alignItems: 'center' }, cardTitle: { fontWeight: '900', color: '#0f172a', fontSize: 15, textAlign: 'right' }, cardSub: { color: '#64748b', fontSize: 12, marginTop: 3, textAlign: 'right' },
+  listContent: { padding: 16, gap: 12 }, buildingsListContent: { padding: 16, paddingBottom: 40, gap: 12 }, buildingManageCard: { backgroundColor: '#fff', borderRadius: 22, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden', shadowColor: '#0f172a', shadowOpacity: 0.04, shadowRadius: 12, elevation: 2 }, buildingCard: { backgroundColor: '#fff', padding: 16, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }, buildingIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: '#ecfdf5', justifyContent: 'center', alignItems: 'center' }, buildingMetaText: { color: '#94a3b8', fontSize: 10, marginTop: 5, textAlign: 'right', fontWeight: '700' }, buildingAddButton: { minHeight: 54, borderRadius: 18, backgroundColor: '#0f766e', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 2, shadowColor: '#0f172a', shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 }, buildingAddButtonText: { color: '#fff', fontWeight: '900', fontSize: 15 }, buildingActionsRow: { flexDirection: 'row-reverse', gap: 8, paddingHorizontal: 12, paddingBottom: 12 }, buildingEditButton: { flex: 1, minHeight: 40, borderRadius: 13, backgroundColor: '#ecfdf5', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6 }, buildingEditButtonText: { color: '#0f766e', fontWeight: '900', fontSize: 12 }, buildingDeleteButton: { flex: 1, minHeight: 40, borderRadius: 13, backgroundColor: '#fef2f2', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6 }, buildingDeleteButtonText: { color: '#ef4444', fontWeight: '900', fontSize: 12 }, cardTitle: { fontWeight: '900', color: '#0f172a', fontSize: 15, textAlign: 'right' }, cardSub: { color: '#64748b', fontSize: 12, marginTop: 3, textAlign: 'right' },
   screenContent: { padding: 16, paddingBottom: 110 }, ownersScreenContent: { paddingTop: 14 }, expensesScreenContent: { paddingTop: 14 }, expensesScreenCodeBadge: { transform: [{ translateX: 150 }] }, heroCard: { backgroundColor: '#0f766e', borderRadius: 26, padding: 18, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, marginBottom: 14 }, heroIcon: { width: 56, height: 56, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }, heroTitle: { color: '#fff', fontWeight: '900', fontSize: 20, textAlign: 'right' }, heroSub: { color: '#ccfbf1', marginTop: 4, textAlign: 'right' },
   statsGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10 }, statCard: { width: '48.5%', backgroundColor: '#fff', borderRadius: 22, padding: 14, minHeight: 122, borderWidth: 1, borderColor: '#e2e8f0' }, statIconWrap: { width: 40, height: 40, borderRadius: 15, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }, statTitle: { color: '#64748b', fontSize: 12, textAlign: 'right' }, statValue: { color: '#0f172a', fontSize: 15, fontWeight: '900', marginTop: 6, textAlign: 'right' }, warningCard: { backgroundColor: '#fff7ed', borderColor: '#fed7aa', borderWidth: 1, borderRadius: 18, padding: 12, marginTop: 12 }, warningTitle: { color: '#9a3412', fontWeight: '900', textAlign: 'right' }, warningText: { color: '#9a3412', textAlign: 'right', marginTop: 4 },
   sectionTitle: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7, marginTop: 18, marginBottom: 10 }, sectionText: { fontSize: 17, fontWeight: '900', color: '#0f172a' }, screenCodeBadge: { alignSelf: 'flex-start', backgroundColor: '#e0f2fe', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 2 }, screenCodeText: { color: '#0369a1', fontWeight: '900', fontSize: 11, textAlign: 'right' },
