@@ -1800,18 +1800,95 @@ function OwnerOwnersReadOnlyScreen({ owners }) {
   </ScrollView>;
 }
 function OwnerExpensesReadOnlyScreen({ expenses }) {
-  return <ScrollView contentContainerStyle={styles.screenContent}>
-    <SectionTitle icon="receipt-outline" title="المصروفات" />
-    {(expenses || []).length === 0 ? <EmptyState icon="receipt-outline" title="لا توجد مصروفات" text="لا توجد مصروفات مسجلة حاليًا." /> : null}
-    {(expenses || []).map((item) => <View key={item.id} style={styles.rowCard}>
-      <View style={styles.rowIcon}><Ionicons name="receipt-outline" size={20} color="#0f766e" /></View>
-      <View style={styles.flex1}>
-        <Text style={styles.cardTitle}>{item.category || 'مصروف'}</Text>
-        <Text style={styles.cardSub}>{displayDate(item.expense_date)}{item.description ? ` - ${displayTextDates(item.description)}` : ''}</Text>
-        <Text style={styles.cardSub}>إجمالي المصروف: {money(item.amount)} • نصيبك: {money(item.owner_share)}</Text>
+  const [selectedCategory, setSelectedCategory] = useState(null);
+
+  const groupedExpenses = useMemo(() => {
+    const groups = new Map();
+
+    (expenses || []).forEach((item) => {
+      const category = String(item?.category || 'أخرى').trim() || 'أخرى';
+      if (!groups.has(category)) {
+        groups.set(category, {
+          category,
+          items: [],
+          totalAmount: 0,
+          totalOwnerShare: 0,
+        });
+      }
+
+      const group = groups.get(category);
+      group.items.push(item);
+      group.totalAmount += Number(item?.amount || 0);
+      group.totalOwnerShare += Number(item?.owner_share || 0);
+    });
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        items: group.items.sort((a, b) => String(b?.expense_date || '').localeCompare(String(a?.expense_date || ''))),
+      }))
+      .sort((a, b) => a.category.localeCompare(b.category, 'ar'));
+  }, [expenses]);
+
+  return <>
+    <ScrollView contentContainerStyle={styles.screenContent}>
+      <SectionTitle icon="receipt-outline" title="المصروفات" />
+      {(expenses || []).length === 0 ? <EmptyState icon="receipt-outline" title="لا توجد مصروفات" text="لا توجد مصروفات مسجلة حاليًا." /> : null}
+
+      {groupedExpenses.map((group) => <Pressable
+        key={group.category}
+        onPress={() => setSelectedCategory(group)}
+        style={({ pressed }) => [styles.rowCard, { paddingVertical: 16 }, pressed && styles.pressed]}
+      >
+        <View style={styles.rowIcon}><Ionicons name="receipt-outline" size={22} color="#0f766e" /></View>
+        <View style={styles.flex1}>
+          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <Text style={styles.cardTitle}>{group.category}</Text>
+            <View style={[styles.badge, styles.badgeBalanced]}><Text style={styles.badgeText}>{group.items.length} {group.items.length === 1 ? 'عملية' : 'عمليات'}</Text></View>
+          </View>
+          <Text style={[styles.cardSub, { marginTop: 8 }]}>إجمالي المصروفات: {money(group.totalAmount)}</Text>
+          <Text style={styles.cardSub}>إجمالي نصيبك: {money(group.totalOwnerShare)}</Text>
+          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, marginTop: 8 }}>
+            <Text style={{ color: '#0f766e', fontWeight: '800', fontSize: 12 }}>عرض التفاصيل</Text>
+            <Ionicons name="chevron-back" size={16} color="#0f766e" />
+          </View>
+        </View>
+      </Pressable>)}
+    </ScrollView>
+
+    <Modal visible={!!selectedCategory} transparent animationType="fade" onRequestClose={() => setSelectedCategory(null)}>
+      <View style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSelectedCategory(null)} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={() => setSelectedCategory(null)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>{selectedCategory?.category || 'تفاصيل المصروفات'}</Text>
+              <Text style={styles.ownerMeta}>{selectedCategory?.items?.length || 0} عملية • نصيبك {money(selectedCategory?.totalOwnerShare || 0)}</Text>
+            </View>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            {(selectedCategory?.items || []).map((item) => <View key={item.id} style={[styles.rowCard, { marginBottom: 10 }]}>
+              <View style={styles.rowIcon}><Ionicons name="receipt-outline" size={20} color="#0f766e" /></View>
+              <View style={styles.flex1}>
+                <Text style={styles.cardTitle}>{displayDate(item.expense_date)}</Text>
+                {item.description ? <Text style={[styles.cardSub, { marginTop: 5 }]}>{displayTextDates(item.description)}</Text> : null}
+                <Text style={[styles.cardSub, { marginTop: 7 }]}>إجمالي المصروف: {money(item.amount)}</Text>
+                <Text style={styles.cardSub}>نصيبك: {money(item.owner_share)}</Text>
+              </View>
+            </View>)}
+
+            <View style={[styles.formCard, { padding: 12, marginTop: 2 }]}>
+              <Text style={styles.settingsTitle}>إجمالي {selectedCategory?.category || ''}</Text>
+              <Text style={[styles.settingsText, { marginTop: 6 }]}>إجمالي المصروفات: {money(selectedCategory?.totalAmount || 0)}</Text>
+              <Text style={styles.settingsText}>إجمالي نصيبك: {money(selectedCategory?.totalOwnerShare || 0)}</Text>
+            </View>
+          </ScrollView>
+        </View>
       </View>
-    </View>)}
-  </ScrollView>;
+    </Modal>
+  </>;
 }
 function OwnerSettingsScreen({ setTab, onLogout }) {
   const confirmLogout = () => Alert.alert('تسجيل الخروج', 'هل تريد تسجيل الخروج من الحساب؟', [{ text: 'إلغاء', style: 'cancel' }, { text: 'خروج', style: 'destructive', onPress: onLogout }]);
