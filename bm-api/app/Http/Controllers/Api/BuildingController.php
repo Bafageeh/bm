@@ -22,7 +22,7 @@ class BuildingController extends BaseApiController
             : $user->managedBuildings()->withCount(['apartments', 'owners', 'expenses', 'payments'])->orderBy('name')->get();
 
         if ($user->isOwner()) {
-            $buildings = $user->ownerProfiles()->with('building')->get()->pluck('building')->filter()->values();
+            $buildings = $user->ownerProfiles()->with('building')->get()->pluck('building')->filter()->unique('id')->values();
             $buildings->each->loadCount(['apartments', 'owners', 'expenses', 'payments']);
         }
 
