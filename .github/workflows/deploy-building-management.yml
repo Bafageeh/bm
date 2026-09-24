@@ -1,0 +1,45 @@
+name: Deploy Building Management
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "bm-api/app/Http/Controllers/Api/BuildingController.php"
+      - "bm-api/routes/api.php"
+      - ".github/workflows/deploy-building-management.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy building management backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 5m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+
+            cd "$ROOT"
+            git fetch origin main
+
+            git show origin/main:bm-api/app/Http/Controllers/Api/BuildingController.php > /tmp/BuildingController.php
+            install -o pmsa -g pmsa -m 0644 /tmp/BuildingController.php "$API/app/Http/Controllers/Api/BuildingController.php"
+
+            git show origin/main:bm-api/routes/api.php > /tmp/bm-api-routes.php
+            install -o pmsa -g pmsa -m 0644 /tmp/bm-api-routes.php "$API/routes/api.php"
+
+            php -l "$API/app/Http/Controllers/Api/BuildingController.php"
+            php -l "$API/routes/api.php"
+
+            cd "$API"
+            php artisan optimize:clear
+            php artisan route:list --path=buildings
+            echo "Building management backend deployed."
