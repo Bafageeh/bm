@@ -372,7 +372,6 @@ function Header({ title, subtitle, onLogout, onBack, token }) {
       <View style={styles.headerActions}>
         {onBack ? <HeaderIconButton icon="arrow-right" color="#0f766e" label="رجوع" onPress={onBack} /> : null}
         <HeaderIconButton icon="bell-ring-outline" color="#7c3aed" label="تنبيه" onPress={openNotifications} />
-        {onLogout ? <HeaderIconButton icon="logout-variant" color="#ef4444" label="خروج" onPress={onLogout} /> : null}
       </View>
       <View style={styles.flex1}>
         <Text style={styles.headerTitle}>{title}</Text>
