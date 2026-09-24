@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BuildingController;
 use App\Http\Controllers\Api\DashboardController;
@@ -33,6 +34,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/push-tokens', [PushTokenController::class, 'destroy']);
     Route::get('/notifications', [UserNotificationController::class, 'index']);
     Route::post('/notifications/read-all', [UserNotificationController::class, 'markAllRead']);
+
+    Route::get('/admin/users', [AdminUserController::class, 'index']);
 
     Route::get('/buildings', [BuildingController::class, 'index']);
     Route::post('/buildings', [BuildingController::class, 'store']);
