@@ -20,6 +20,8 @@ class ExpenseAttachmentController extends BaseApiController
         $request->validate([
             'attachments' => ['required', 'array', 'min:1', 'max:2'],
             'attachments.*' => ['required', 'file', 'max:10240', 'mimetypes:image/jpeg,image/png,image/webp,application/pdf,application/x-pdf'],
+            'display_names' => ['nullable', 'array', 'max:2'],
+            'display_names.*' => ['nullable', 'string', 'max:120'],
         ]);
 
         $files = collect($request->file('attachments', []));
@@ -36,10 +38,17 @@ class ExpenseAttachmentController extends BaseApiController
         abort_if($incomingPdfCount > 1, 422, 'يمكن إرفاق ملف PDF واحد فقط.');
         abort_if($existingImageCount + $incomingImageCount > 2, 422, 'الحد الأقصى صورتان لكل مصروف.');
 
-        foreach ($files as $file) {
+        $requestedNames = $request->input('display_names', []);
+
+        foreach ($files->values() as $index => $file) {
             $path = $file->store('expense-attachments', 'local');
+            $requestedName = trim((string) ($requestedNames[$index] ?? ''));
+            $sequence = $existing->count() + $index + 1;
+            $fallbackName = $this->isPdf($file) ? 'ملف PDF '.$sequence : 'صورة '.$sequence;
+
             $expense->attachments()->create([
                 'original_name' => $file->getClientOriginalName(),
+                'display_name' => $requestedName !== '' ? $requestedName : $fallbackName,
                 'mime_type' => $file->getClientMimeType() ?: $file->getMimeType() ?: 'application/octet-stream',
                 'size' => (int) $file->getSize(),
                 'path' => $path,
