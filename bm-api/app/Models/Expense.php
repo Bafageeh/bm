@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Expense extends Model
 {
@@ -36,5 +37,10 @@ class Expense extends Model
         return $this->belongsToMany(Owner::class, 'expense_owner')
             ->withPivot('share_amount')
             ->withTimestamps();
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(ExpenseAttachment::class)->oldest('id');
     }
 }
