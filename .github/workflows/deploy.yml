@@ -2,6 +2,9 @@ name: Deploy BM Dev
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   deploy:
@@ -19,15 +22,17 @@ jobs:
             set -e
             ROOT=/mnt/home-storage/home/pmsa/apps/bm
             MOBILE="$ROOT/bm-mobile"
+            API="$ROOT/bm-api"
 
             cd "$ROOT"
             git fetch origin main
             git reset --hard origin/main
 
-            chown -R pmsa:pmsa "$MOBILE"
+            chown -R pmsa:pmsa "$MOBILE" "$API"
             mkdir -p /home/pmsa/apps/.cache /home/pmsa/apps/.tmp
             chown -R pmsa:pmsa /home/pmsa/apps/.cache /home/pmsa/apps/.tmp
 
+            runuser -u pmsa -- bash -lc "cd '$API' && php -l app/Models/ExpenseAttachment.php && php -l app/Http/Controllers/Api/ExpenseAttachmentController.php && php artisan optimize:clear && php artisan migrate --force && php artisan route:list --path=expense-attachments"
             runuser -u pmsa -- bash -lc "cd '$MOBILE' && npm install --legacy-peer-deps"
 
             rm -rf /home/pmsa/apps/.tmp/bm-deploy-check
