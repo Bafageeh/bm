@@ -3,7 +3,6 @@ import { ActivityIndicator, Alert, FlatList, I18nManager, Image, KeyboardAvoidin
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Ellipse, Line, Path, Polyline, Rect } from 'react-native-svg';
 import { StatusBar } from 'expo-status-bar';
-import * as Updates from 'expo-updates';
 import * as SecureStore from 'expo-secure-store';
 import { File as ExpoFile } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
@@ -282,15 +281,25 @@ function dateParts(value) {
 }
 
 async function request(path, options = {}, token) {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) },
-  });
-  const text = await response.text();
-  let data = {};
-  try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { message: text || 'حدث خطأ غير متوقع' }; }
-  if (!response.ok) throw new Error(data?.message || Object.values(data?.errors || {})?.flat()?.[0] || 'حدث خطأ غير متوقع');
-  return data;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) },
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { message: text || 'حدث خطأ غير متوقع' }; }
+    if (!response.ok) throw new Error(data?.message || Object.values(data?.errors || {})?.flat()?.[0] || 'حدث خطأ غير متوقع');
+    return data;
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('انتهت مهلة الاتصال بالخادم. تحقق من الإنترنت ثم حاول مرة أخرى.');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function requestFormData(path, formData, token) {
@@ -1379,52 +1388,10 @@ function BuildingSettingsScreen({ token, buildingId, dashboard, reload, setTab }
   return <ScrollView contentContainerStyle={styles.screenContent}><ScreenCode code="#S-006" /><SectionTitle icon="business-outline" title="إعدادات المبنى" /><View style={styles.formCard}><Field label="اسم المبنى" value={buildingName} onChangeText={setBuildingName} placeholder="اسم المبنى" /><Field label="عدد الشقق" value={apartmentCount} onChangeText={setApartmentCount} keyboardType="numeric" placeholder="مثال: 12" /><DatePickerField label="تاريخ بداية الدورة السنوية" value={annualCycleStartsOn} onChange={setAnnualCycleStartsOn} /><Text style={styles.settingsHint}>تاريخ بداية الدورة يحدد بداية السنة المالية للمصروفات والتقارير.</Text><Text style={styles.settingsHint}>عدد الشقق هنا هو المعتمد في شاشة الملاك، ويتم تجهيز الشقق تلقائيًا بأرقام متسلسلة من 1 إلى العدد المحدد.</Text><Text style={styles.settingsHint}>عند تقليل العدد لن يتم حذف أي شقة تحتوي على بيانات مالك حفاظًا على البيانات.</Text><PrimaryButton title="حفظ إعدادات المبنى" icon="save-outline" onPress={save} loading={loading} /><PrimaryButton title="رجوع للإعدادات" icon="arrow-forward-outline" onPress={() => setTab('settings')} variant="light" /></View></ScrollView>;
 }
 function OwnerOnlyScreen({ token }) { const [data, setData] = useState(null); const [loading, setLoading] = useState(true); useEffect(() => { request('/owner/dashboard', {}, token).then(setData).catch((e) => Alert.alert('خطأ', e.message)).finally(() => setLoading(false)); }, [token]); if (loading) return <LoadingScreen />; const profile = data?.owners?.[0]; if (!profile) return <EmptyState icon="home-outline" title="لا توجد بيانات" text="لم يتم ربط حسابك بمالك بعد." />; return <ScrollView contentContainerStyle={styles.screenContent}><ScreenCode code="#S-012" /><Dashboard dashboard={{ building: profile.building, stats: {}, owners: [profile.summary] }} /><SectionTitle icon="receipt-outline" title="تفصيل نصيبك من المصروفات" />{(profile.expenses || []).map((item) => <ExpenseRow key={item.id} item={{ ...item, amount: item.owner_share }} />)}</ScrollView>; }
-function useAutomaticOtaUpdates() {
-  useEffect(() => {
-    if (__DEV__ || !Updates.isEnabled) return undefined;
-
-    let alive = true;
-    let checking = false;
-    let lastCheckAt = 0;
-
-    const checkAndApply = async () => {
-      const now = Date.now();
-      if (!alive || checking || now - lastCheckAt < 30000) return;
-      checking = true;
-      lastCheckAt = now;
-      try {
-        const result = await Updates.checkForUpdateAsync();
-        if (alive && result.isAvailable) {
-          await Updates.fetchUpdateAsync();
-          if (alive) await Updates.reloadAsync();
-        }
-      } catch (error) {
-        console.warn('BM automatic update check failed', error?.message || error);
-      } finally {
-        checking = false;
-      }
-    };
-
-    checkAndApply();
-    const { AppState } = require('react-native');
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') checkAndApply();
-    });
-    const timer = setInterval(checkAndApply, 30 * 60 * 1000);
-
-    return () => {
-      alive = false;
-      clearInterval(timer);
-      subscription?.remove?.();
-    };
-  }, []);
-}
-
 function LoadingScreen() { return <View style={styles.loading}><ActivityIndicator color="#0f766e" size="large" /><Text style={styles.loadingText}>جاري التحميل...</Text></View>; }
 function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout }) { const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async (options = {}) => { if (!selectedBuilding) return; const silent = options?.silent === true; if (!silent) setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { if (!silent) setLoading(false); } }; useEffect(() => { reload(); }, [selectedBuilding?.id]); if (user?.role === 'owner') return <SafeAreaView style={styles.container}><Header title="حسابي" subtitle={user.name} onLogout={onLogout} token={token} /><OwnerOnlyScreen token={token} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={styles.container}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle="إدارة اتحاد الملاك" onLogout={onLogout} onBack={() => setSelectedBuilding(null)} token={token} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} expenses={expenses} payments={payments} reload={reload} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'payments'} icon="wallet-outline" title="الدفعات" onPress={() => setTab('payments')} /><TabButton active={tab === 'settings' || tab === 'buildingSettings' || tab === 'expenseCategories'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
 function TabButton({ active, icon, title, onPress }) { return <Pressable onPress={onPress} style={styles.tabBtn}><Ionicons name={icon} size={21} color={active ? '#0f766e' : '#94a3b8'} /><Text style={[styles.tabText, active && styles.tabTextActive]}>{title}</Text></Pressable>; }
 export default function App() {
-  useAutomaticOtaUpdates();
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
