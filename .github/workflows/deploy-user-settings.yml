@@ -1,0 +1,46 @@
+name: Deploy User Settings
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "bm-api/app/Http/Controllers/Api/AuthController.php"
+      - "bm-api/routes/api.php"
+      - ".github/workflows/deploy-user-settings.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy user settings backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 5m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+
+            cd "$ROOT"
+            git fetch origin main
+
+            git show origin/main:bm-api/app/Http/Controllers/Api/AuthController.php > /tmp/AuthController.php
+            install -o pmsa -g pmsa -m 0644 /tmp/AuthController.php "$API/app/Http/Controllers/Api/AuthController.php"
+
+            git show origin/main:bm-api/routes/api.php > /tmp/bm-api-routes.php
+            install -o pmsa -g pmsa -m 0644 /tmp/bm-api-routes.php "$API/routes/api.php"
+
+            php -l "$API/app/Http/Controllers/Api/AuthController.php"
+            php -l "$API/routes/api.php"
+
+            cd "$API"
+            php artisan optimize:clear
+            php artisan route:list --path=me
+            php artisan route:list --path=change-password
+            echo "User settings backend deployed."
