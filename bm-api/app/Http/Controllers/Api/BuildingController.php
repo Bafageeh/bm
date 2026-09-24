@@ -18,11 +18,12 @@ class BuildingController extends BaseApiController
         $user = $request->user();
 
         $buildings = $user->isAdmin()
-            ? Building::query()->orderBy('name')->get()
-            : $user->managedBuildings()->orderBy('name')->get();
+            ? Building::query()->withCount(['apartments', 'owners', 'expenses', 'payments'])->orderBy('name')->get()
+            : $user->managedBuildings()->withCount(['apartments', 'owners', 'expenses', 'payments'])->orderBy('name')->get();
 
         if ($user->isOwner()) {
             $buildings = $user->ownerProfiles()->with('building')->get()->pluck('building')->filter()->values();
+            $buildings->each->loadCount(['apartments', 'owners', 'expenses', 'payments']);
         }
 
         return ['data' => $buildings];
