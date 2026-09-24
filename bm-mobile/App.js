@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import * as SecureStore from 'expo-secure-store';
 import { File as ExpoFile } from 'expo-file-system';
+import { fetch as expoFetch } from 'expo/fetch';
 
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(false);
@@ -293,7 +294,7 @@ async function request(path, options = {}, token) {
 }
 
 async function requestFormData(path, formData, token) {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await expoFetch(`${API_URL}${path}`, {
     method: 'POST',
     body: formData,
     headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
