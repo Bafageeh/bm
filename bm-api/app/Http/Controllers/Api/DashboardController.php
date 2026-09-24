@@ -64,6 +64,12 @@ class DashboardController extends BaseApiController
             'owners' => $profiles->map(function ($owner) {
                 $building = $owner->building;
                 $summary = $this->ownerSummary($building, $owner);
+                $buildingOwners = $building->owners()
+                    ->with(['apartments', 'payments', 'user'])
+                    ->orderBy('name')
+                    ->get()
+                    ->map(fn ($buildingOwner) => $this->ownerSummary($building, $buildingOwner))
+                    ->values();
 
                 return [
                     'building' => [
@@ -73,7 +79,9 @@ class DashboardController extends BaseApiController
                         'city' => $building->city,
                         'annual_cycle_starts_on' => optional($building->annual_cycle_starts_on)->format('Y-m-d'),
                     ],
+                    'stats' => $this->buildingStats($building),
                     'summary' => $summary,
+                    'building_owners' => $buildingOwners,
                     'expenses' => $building->expenses()->latest('expense_date')->get()->map(function ($expense) use ($building, $owner) {
                         $apartmentCount = max(1, $building->apartments()->count());
                         $ownerApartments = $owner->apartments()->count();
