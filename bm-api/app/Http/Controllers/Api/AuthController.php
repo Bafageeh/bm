@@ -23,6 +23,14 @@ class AuthController extends BaseApiController
             ->orWhere('phone', $data['login'])
             ->first();
 
+        if (! $user) {
+            $user = \App\Models\Owner::query()
+                ->where('national_id', $data['login'])
+                ->whereNotNull('user_id')
+                ->with('user')
+                ->first()?->user;
+        }
+
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'login' => ['بيانات الدخول غير صحيحة.'],
@@ -147,7 +155,7 @@ class AuthController extends BaseApiController
             : $user->managedBuildings()->orderBy('name')->get();
 
         if ($user->isOwner()) {
-            $buildings = $user->ownerProfiles()->with('building')->get()->pluck('building')->filter()->values();
+            $buildings = $user->ownerProfiles()->with('building')->get()->pluck('building')->filter()->unique('id')->values();
         }
 
         return [
