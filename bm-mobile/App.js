@@ -1555,6 +1555,8 @@ function AdminUsersScreen({ token, setTab }) {
   const [loading, setLoading] = useState(true);
   const [roleFilter, setRoleFilter] = useState('all');
   const [buildingFilter, setBuildingFilter] = useState('all');
+  const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+  const [buildingDropdownOpen, setBuildingDropdownOpen] = useState(false);
 
   useEffect(() => {
     request('/admin/users', {}, token)
@@ -1576,11 +1578,19 @@ function AdminUsersScreen({ token, setTab }) {
 
   const buildings = Array.from(buildingMap.values()).sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'ar'));
   const roleOptions = [
-    { key: 'all', label: 'الكل' },
+    { key: 'all', label: 'جميع الصلاحيات' },
     { key: 'admin', label: 'مدير التطبيق' },
     { key: 'manager', label: 'مدير مبنى' },
     { key: 'owner', label: 'مالك' },
   ];
+  const buildingOptions = [
+    { key: 'all', label: 'جميع المباني' },
+    ...buildings.map((building) => ({ key: String(building.id), label: building.name })),
+    { key: 'none', label: 'غير مرتبط بمبنى' },
+  ];
+
+  const selectedRoleLabel = roleOptions.find((item) => item.key === roleFilter)?.label || 'جميع الصلاحيات';
+  const selectedBuildingLabel = buildingOptions.find((item) => item.key === buildingFilter)?.label || 'جميع المباني';
 
   const filteredUsers = (users || [])
     .filter((item) => {
@@ -1592,10 +1602,6 @@ function AdminUsersScreen({ token, setTab }) {
       return roleMatch && buildingMatch;
     })
     .sort((a, b) => (roleOrder[a.role] || 9) - (roleOrder[b.role] || 9) || String(a?.name || a?.username || '').localeCompare(String(b?.name || b?.username || ''), 'ar'));
-
-  const filterChip = (active, label, onPress) => <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
-    <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-  </Pressable>;
 
   const renderPermissions = (item) => <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
     {(item.permissions || []).map((permission, index) => <View key={index} style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 }}><Text style={{ color: '#475569', fontSize: 11, fontWeight: '700' }}>{permission}</Text></View>)}
@@ -1619,30 +1625,56 @@ function AdminUsersScreen({ token, setTab }) {
     </View>;
   };
 
+  const renderDropdown = ({ label, valueLabel, open, setOpen, options, value, onChange }) => <View style={{ marginBottom: 12 }}>
+    <Text style={[styles.label, { marginBottom: 6 }]}>{label}</Text>
+    <Pressable onPress={() => {
+      if (label === 'الصلاحية') setBuildingDropdownOpen(false);
+      else setRoleDropdownOpen(false);
+      setOpen((current) => !current);
+    }} style={({ pressed }) => [styles.typeDropdownField, pressed && styles.pressed]}>
+      <Ionicons name={open ? 'chevron-up-outline' : 'chevron-down-outline'} size={20} color="#0f766e" />
+      <Text style={styles.typeDropdownText}>{valueLabel}</Text>
+    </Pressable>
+    {open ? <View style={styles.typeDropdownMenu}>
+      {options.map((option) => <Pressable key={option.key} onPress={() => { onChange(option.key); setOpen(false); }} style={({ pressed }) => [styles.typeDropdownItem, value === option.key && styles.typeDropdownItemActive, pressed && styles.pressed]}>
+        <Text style={[styles.typeDropdownItemText, value === option.key && styles.typeDropdownItemTextActive]}>{option.label}</Text>
+        {value === option.key ? <Ionicons name="checkmark" size={18} color="#0f766e" /> : null}
+      </Pressable>)}
+    </View> : null}
+  </View>;
+
   if (loading) return <LoadingScreen />;
 
   return <ScrollView contentContainerStyle={styles.screenContent}>
     <SectionTitle icon="people-circle-outline" title="المستخدمون والصلاحيات" />
 
     <View style={[styles.formCard, { padding: 12, marginBottom: 12 }]}>
-      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <Ionicons name="filter-outline" size={21} color="#0f766e" />
         <Text style={styles.settingsTitle}>فلترة المستخدمين</Text>
       </View>
 
-      <Text style={[styles.label, { marginBottom: 6 }]}>حسب الصلاحية</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-        {roleOptions.map((option) => <View key={option.key}>{filterChip(roleFilter === option.key, option.label, () => setRoleFilter(option.key))}</View>)}
-      </ScrollView>
+      {renderDropdown({
+        label: 'الصلاحية',
+        valueLabel: selectedRoleLabel,
+        open: roleDropdownOpen,
+        setOpen: setRoleDropdownOpen,
+        options: roleOptions,
+        value: roleFilter,
+        onChange: setRoleFilter,
+      })}
 
-      <Text style={[styles.label, { marginTop: 12, marginBottom: 6 }]}>حسب المبنى</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-        <View>{filterChip(buildingFilter === 'all', 'جميع المباني', () => setBuildingFilter('all'))}</View>
-        {buildings.map((building) => <View key={building.id}>{filterChip(String(buildingFilter) === String(building.id), building.name, () => setBuildingFilter(String(building.id)))}</View>)}
-        <View>{filterChip(buildingFilter === 'none', 'غير مرتبط بمبنى', () => setBuildingFilter('none'))}</View>
-      </ScrollView>
+      {renderDropdown({
+        label: 'المبنى',
+        valueLabel: selectedBuildingLabel,
+        open: buildingDropdownOpen,
+        setOpen: setBuildingDropdownOpen,
+        options: buildingOptions,
+        value: buildingFilter,
+        onChange: setBuildingFilter,
+      })}
 
-      {(roleFilter !== 'all' || buildingFilter !== 'all') ? <Pressable onPress={() => { setRoleFilter('all'); setBuildingFilter('all'); }} style={({ pressed }) => [{ alignSelf: 'flex-start', marginTop: 12, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 12, backgroundColor: '#f1f5f9' }, pressed && styles.pressed]}>
+      {(roleFilter !== 'all' || buildingFilter !== 'all') ? <Pressable onPress={() => { setRoleFilter('all'); setBuildingFilter('all'); setRoleDropdownOpen(false); setBuildingDropdownOpen(false); }} style={({ pressed }) => [{ alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: '#f1f5f9' }, pressed && styles.pressed]}>
         <Text style={{ color: '#475569', fontWeight: '800' }}>مسح الفلاتر</Text>
       </Pressable> : null}
     </View>
