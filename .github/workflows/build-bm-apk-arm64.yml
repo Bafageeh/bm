@@ -7,6 +7,9 @@ on:
       - main
     paths:
       - ".github/workflows/build-bm-apk-arm64.yml"
+      - "bm-mobile/App.js"
+      - "bm-mobile/app.json"
+      - "bm-mobile/package.json"
 
 jobs:
   build-apk-arm64:
@@ -16,7 +19,7 @@ jobs:
       CI: "1"
       EXPO_PUBLIC_API_URL: "https://bm.pm.sa/api"
       ORG_GRADLE_PROJECT_reactNativeArchitectures: "arm64-v8a"
-      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.jvmargs=-Xmx4g"
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1024m"
 
     steps:
       - name: Checkout
