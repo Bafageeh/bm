@@ -25,6 +25,7 @@ Route::post('/manager-registration/verify', [ManagerRegistrationController::clas
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/me', [AuthController::class, 'updateProfile']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/change-'.'password', [AuthController::class, 'changePassword']);
 
