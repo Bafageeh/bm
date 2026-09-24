@@ -18,6 +18,10 @@ class UpdateController extends Controller
             return response()->json(['error' => 'Unsupported platform'], 400);
         }
 
+        // OTA delivery is temporarily disabled to prevent reload loops in installed APKs.
+        // Native APK builds continue to work from their embedded JavaScript bundle.
+        return $this->noUpdateResponse($protocolVersion);
+
         if ($runtimeVersion === '' || !preg_match('/^[A-Za-z0-9._-]+$/', $runtimeVersion)) {
             return response()->json(['error' => 'Invalid runtime version'], 400);
         }
