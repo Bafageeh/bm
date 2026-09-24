@@ -1554,10 +1554,6 @@ function UserSettingsScreen({ token, user, setTab, onUserUpdated }) {
   const [phone, setPhone] = useState(user?.phone || '');
   const [email, setEmail] = useState(user?.email || '');
   const [profileLoading, setProfileLoading] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [passwordConfirmation, setPasswordConfirmation] = useState('');
-  const [passwordLoading, setPasswordLoading] = useState(false);
 
   useEffect(() => {
     setUsername(user?.username || '');
@@ -1588,48 +1584,13 @@ function UserSettingsScreen({ token, user, setTab, onUserUpdated }) {
     }
   };
 
-  const savePassword = async () => {
-    if (!currentPassword) return Alert.alert('تنبيه', 'أدخل الرقم السري الحالي');
-    if (!newPassword || newPassword.length < 6) return Alert.alert('تنبيه', 'الرقم السري الجديد يجب ألا يقل عن 6 أحرف');
-    if (newPassword !== passwordConfirmation) return Alert.alert('تنبيه', 'تأكيد الرقم السري غير مطابق');
-
-    try {
-      setPasswordLoading(true);
-      await request('/change-password', {
-        method: 'POST',
-        body: JSON.stringify({
-          current_password: currentPassword,
-          password: newPassword,
-          password_confirmation: passwordConfirmation,
-        }),
-      }, token);
-      setCurrentPassword('');
-      setNewPassword('');
-      setPasswordConfirmation('');
-      Alert.alert('تم', 'تم تعديل الرقم السري بنجاح');
-    } catch (error) {
-      Alert.alert('تعذر تعديل الرقم السري', error.message);
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
-
   return <ScrollView contentContainerStyle={styles.screenContent}>
-    <ScreenCode code="#S-008" />
     <SectionTitle icon="person-circle-outline" title="إعدادات المستخدم" />
     <View style={styles.formCard}>
       <Field label="اسم المستخدم" value={username} onChangeText={setUsername} placeholder="اسم المستخدم" />
       <Field label="رقم الجوال" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="05xxxxxxxx" />
       <Field label="البريد الإلكتروني" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="name@example.com" />
       <PrimaryButton title="حفظ بيانات المستخدم" icon="save-outline" onPress={saveProfile} loading={profileLoading} />
-    </View>
-
-    <SectionTitle icon="lock-closed-outline" title="تعديل الرقم السري" />
-    <View style={styles.formCard}>
-      <Field label="الرقم السري الحالي" value={currentPassword} onChangeText={setCurrentPassword} placeholder="••••••" secureTextEntry />
-      <Field label="الرقم السري الجديد" value={newPassword} onChangeText={setNewPassword} placeholder="6 أحرف على الأقل" secureTextEntry />
-      <Field label="تأكيد الرقم السري الجديد" value={passwordConfirmation} onChangeText={setPasswordConfirmation} placeholder="أعد إدخال الرقم السري" secureTextEntry />
-      <PrimaryButton title="تعديل الرقم السري" icon="key-outline" onPress={savePassword} loading={passwordLoading} />
       <PrimaryButton title="رجوع للإعدادات" icon="arrow-forward-outline" onPress={() => setTab('settings')} variant="light" />
     </View>
   </ScrollView>;
