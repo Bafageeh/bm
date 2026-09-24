@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, I18nManager, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, I18nManager, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Ellipse, Line, Path, Polyline, Rect } from 'react-native-svg';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import * as SecureStore from 'expo-secure-store';
+import * as DocumentPicker from 'expo-document-picker';
 
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(false);
@@ -39,7 +40,7 @@ const DRAWN_ICON_NAME_MAP = {
   'filter-outline': 'filter', 'options-outline': 'sliders',
   'menu': 'menu', 'menu-outline': 'menu',
   'mail-outline': 'mail', 'chatbubble-outline': 'chat',
-  'camera-outline': 'camera', 'image-outline': 'image',
+  'camera-outline': 'camera', 'image-outline': 'image', 'attach-outline': 'paperclip', 'attach': 'paperclip', 'paperclip': 'paperclip',
   'location-outline': 'location', 'map-outline': 'map',
   'time-outline': 'clock', 'timer-outline': 'clock'
 };
@@ -92,6 +93,7 @@ function renderDrawnIcon(key, color, strokeWidth) {
     case 'chat': return <Path d="M4 4h16v12H9l-5 4V4z" {...s} />;
     case 'camera': return <><Rect x="3" y="7" width="18" height="13" rx="3" {...s} /><Path d="M8 7l1.5-3h5L16 7" {...s} /><Circle cx="12" cy="13.5" r="3.5" {...s} /></>;
     case 'image': return <><Rect x="3" y="4" width="18" height="16" rx="2" {...s} /><Circle cx="8" cy="9" r="1.5" {...s} /><Polyline points="5 18 10 13 13 16 16 12 20 18" {...s} /></>;
+    case 'paperclip': return <Path d="M8.5 12.5l6.8-6.8a3.5 3.5 0 0 1 5 5l-9.2 9.2a5 5 0 0 1-7.1-7.1l9-9a2.7 2.7 0 0 1 3.8 3.8l-8.9 8.9a1.5 1.5 0 0 1-2.1-2.1l7.6-7.6" {...s} />;
     case 'location': return <><Path d="M12 22s7-6.3 7-13a7 7 0 1 0-14 0c0 6.7 7 13 7 13z" {...s} /><Circle cx="12" cy="9" r="2.5" {...s} /></>;
     case 'map': return <><Path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3V6z" {...s} /><Line x1="9" y1="3" x2="9" y2="18" {...s} /><Line x1="15" y1="6" x2="15" y2="21" {...s} /></>;
     case 'clock': return <><Circle cx="12" cy="12" r="9" {...s} /><Line x1="12" y1="7" x2="12" y2="12" {...s} /><Line x1="12" y1="12" x2="16" y2="14" {...s} /></>;
@@ -290,6 +292,32 @@ async function request(path, options = {}, token) {
   return data;
 }
 
+async function requestFormData(path, formData, token) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    body: formData,
+    headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  const text = await response.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { message: text || 'حدث خطأ غير متوقع' }; }
+  if (!response.ok) throw new Error(data?.message || Object.values(data?.errors || {})?.flat()?.[0] || 'حدث خطأ غير متوقع');
+  return data;
+}
+
+function expenseAttachmentUrl(value) {
+  const url = String(value || '').trim();
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_URL}${url.startsWith('/') ? url : `/${url}`}`;
+}
+
+function isPdfAttachment(item) {
+  const mime = String(item?.mime_type || item?.mimeType || '').toLowerCase();
+  const name = String(item?.original_name || item?.name || '').toLowerCase();
+  return mime.includes('pdf') || name.endsWith('.pdf');
+}
+
 function Field({ label, value, onChangeText, placeholder, keyboardType = 'default', secureTextEntry = false, multiline = false }) {
   return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput style={[styles.input, multiline && styles.textarea]} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="#94a3b8" keyboardType={keyboardType} secureTextEntry={secureTextEntry} multiline={multiline} textAlign="right" />{label.includes('*') ? <Text style={styles.requiredHint}>* حقل إجباري</Text> : null}</View>;
 }
@@ -395,9 +423,10 @@ function Dashboard({ dashboard }) {
 function Stat({ icon, title, value }) { return <View style={styles.statCard}><View style={styles.statIconWrap}><Ionicons name={icon} size={22} color="#0f766e" /></View><Text style={styles.statTitle}>{title}</Text><Text style={styles.statValue}>{value}</Text></View>; }
 function OwnerCard({ owner }) { const isDue = owner.status === 'due'; const isSurplus = owner.status === 'surplus'; return <View style={styles.ownerCard}><View style={styles.ownerTop}><View style={styles.ownerAvatar}><MaterialCommunityIcons name="account-circle-outline" size={22} color="#0f766e" /></View><View style={styles.flex1}><Text style={styles.cardTitle}>{owner.name}</Text><Text style={styles.cardSub}>الشقق: {sortApartmentNumbers(owner.apartments).join('، ') || '-'}</Text></View><View style={[styles.badge, isDue ? styles.badgeDue : isSurplus ? styles.badgeSurplus : styles.badgeBalanced]}><Text style={styles.badgeText}>{isDue ? 'عليه مبلغ' : isSurplus ? 'له فائض' : 'متعادل'}</Text></View></View><View style={styles.ownerAmounts}><SmallAmount title="دفعاته" value={money(owner.total_payments)} /><SmallAmount title="نصيبه" value={money(owner.expense_share)} /><SmallAmount title="المتبقي" value={money(owner.unpaid_amount)} /><SmallAmount title="الرصيد" value={money(owner.balance)} /></View></View>; }
 function SmallAmount({ title, value }) { return <View style={styles.smallAmount}><Text style={styles.smallTitle}>{title}</Text><Text style={styles.smallValue}>{value}</Text></View>; }
-function ExpenseRow({ item, onShowNote, onEdit, onDelete }) {
+function ExpenseRow({ item, onShowNote, onShowAttachments, onEdit, onDelete }) {
   const hasNote = Boolean(String(item.description || '').trim());
-  return <View style={styles.expenseCompactCard}><View style={styles.expenseInfo}><View style={styles.expenseMainLine}><Text style={styles.expenseDateText}>{displayDate(item.expense_date)}</Text><Text style={styles.amountText}>{money(item.amount)}</Text></View></View><View style={styles.expenseIconActions}><Pressable accessibilityLabel="ملاحظة المصروف" onPress={() => onShowNote(item)} style={({ pressed }) => [styles.expenseIconBtn, !hasNote && styles.expenseIconBtnMuted, pressed && styles.pressed]}><Ionicons name={hasNote ? "chatbubble-ellipses-outline" : "chatbubble-outline"} size={19} color={hasNote ? '#64748b' : '#cbd5e1'} /></Pressable><Pressable accessibilityLabel="تعديل المصروف" onPress={() => onEdit(item)} style={({ pressed }) => [styles.expenseIconBtn, styles.expenseEditIconBtn, pressed && styles.pressed]}><Ionicons name="create-outline" size={19} color="#0f766e" /></Pressable><Pressable accessibilityLabel="حذف المصروف" onPress={() => onDelete(item)} style={({ pressed }) => [styles.expenseIconBtn, styles.expenseDeleteIconBtn, pressed && styles.pressed]}><Ionicons name="trash-outline" size={19} color="#ef4444" /></Pressable></View></View>;
+  const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+  return <View style={styles.expenseCompactCard}><View style={styles.expenseInfo}><View style={styles.expenseMainLine}><Text style={styles.expenseDateText}>{displayDate(item.expense_date)}</Text><Text style={styles.amountText}>{money(item.amount)}</Text></View></View><View style={styles.expenseIconActions}>{attachments.length > 0 ? <Pressable accessibilityLabel="عرض مرفقات المصروف" onPress={() => onShowAttachments(item)} style={({ pressed }) => [styles.expenseIconBtn, styles.expenseAttachmentIconBtn, pressed && styles.pressed]}><Ionicons name="attach-outline" size={19} color="#7c3aed" /><View style={styles.expenseAttachmentBadge}><Text style={styles.expenseAttachmentBadgeText}>{attachments.length}</Text></View></Pressable> : null}<Pressable accessibilityLabel="ملاحظة المصروف" onPress={() => onShowNote(item)} style={({ pressed }) => [styles.expenseIconBtn, !hasNote && styles.expenseIconBtnMuted, pressed && styles.pressed]}><Ionicons name={hasNote ? "chatbubble-ellipses-outline" : "chatbubble-outline"} size={19} color={hasNote ? '#64748b' : '#cbd5e1'} /></Pressable><Pressable accessibilityLabel="تعديل المصروف" onPress={() => onEdit(item)} style={({ pressed }) => [styles.expenseIconBtn, styles.expenseEditIconBtn, pressed && styles.pressed]}><Ionicons name="create-outline" size={19} color="#0f766e" /></Pressable><Pressable accessibilityLabel="حذف المصروف" onPress={() => onDelete(item)} style={({ pressed }) => [styles.expenseIconBtn, styles.expenseDeleteIconBtn, pressed && styles.pressed]}><Ionicons name="trash-outline" size={19} color="#ef4444" /></Pressable></View></View>;
 }
 
 function categoryNames(categories) {
@@ -411,6 +440,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
   const [amount, setAmount] = useState('');
   const [expenseDate, setExpenseDate] = useState(todayDate());
   const [description, setDescription] = useState('');
+  const [attachments, setAttachments] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const [typeFormVisible, setTypeFormVisible] = useState(false);
@@ -427,6 +457,9 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
   const [editAmount, setEditAmount] = useState('');
   const [editDate, setEditDate] = useState(todayDate());
   const [editDescription, setEditDescription] = useState('');
+  const [editNewAttachments, setEditNewAttachments] = useState([]);
+  const [attachmentsVisible, setAttachmentsVisible] = useState(false);
+  const [attachmentExpense, setAttachmentExpense] = useState(null);
   const [savingExpense, setSavingExpense] = useState(false);
 
   useEffect(() => {
@@ -481,6 +514,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
     setAmount('');
     setExpenseDate(todayDate());
     setDescription('');
+    setAttachments([]);
   };
   const closeAddExpenseForm = () => {
     resetAddExpenseForm();
@@ -548,18 +582,73 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
     }
   };
 
+  const pickExpenseFiles = async (existingFiles, pendingFiles, setPendingFiles) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+
+      const picked = result.assets;
+      const combined = [...(existingFiles || []), ...(pendingFiles || []), ...picked];
+      const pdfCount = combined.filter(isPdfAttachment).length;
+      const imageCount = combined.length - pdfCount;
+
+      if (pdfCount > 0 && imageCount > 0) {
+        return Alert.alert('المرفقات', 'يمكن إضافة صورتين أو ملف PDF واحد فقط، ولا يمكن الجمع بين الصور وملف PDF.');
+      }
+      if (pdfCount > 1) return Alert.alert('المرفقات', 'يمكن إضافة ملف PDF واحد فقط.');
+      if (imageCount > 2) return Alert.alert('المرفقات', 'الحد الأقصى صورتان لكل مصروف.');
+
+      setPendingFiles([...(pendingFiles || []), ...picked]);
+    } catch (error) {
+      Alert.alert('تعذر اختيار المرفق', error.message || 'حدث خطأ أثناء اختيار الملف');
+    }
+  };
+
+  const uploadExpenseFiles = async (expenseId, files) => {
+    if (!expenseId || !files?.length) return;
+    const formData = new FormData();
+    files.forEach((file, index) => {
+      const type = file.mimeType || (isPdfAttachment(file) ? 'application/pdf' : 'image/jpeg');
+      const name = file.name || `expense-attachment-${index + 1}`;
+      if (Platform.OS === 'web' && file.file) {
+        formData.append('attachments[]', file.file, name);
+      } else {
+        formData.append('attachments[]', { uri: file.uri, name, type });
+      }
+    });
+    await requestFormData(`/buildings/${buildingId}/expenses/${expenseId}/attachments`, formData, token);
+  };
+
+  const openExpenseAttachments = (item) => {
+    setAttachmentExpense(item);
+    setAttachmentsVisible(true);
+  };
+
   const add = async () => {
     const apiDate = normalizeDateForApi(expenseDate);
     if (!amount) return Alert.alert('تنبيه', 'أدخل مبلغ المصروف');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(apiDate)) return Alert.alert('تنبيه', 'اختر تاريخ المصروف');
     try {
       setLoading(true);
-      await request(`/buildings/${buildingId}/expenses`, {
+      const created = await request(`/buildings/${buildingId}/expenses`, {
         method: 'POST',
         body: JSON.stringify({ category, amount: Number(amount), expense_date: apiDate, description }),
       }, token);
+      let attachmentWarning = '';
+      if (attachments.length > 0) {
+        try {
+          await uploadExpenseFiles(created?.data?.id, attachments);
+        } catch (error) {
+          attachmentWarning = error.message || 'تعذر رفع المرفقات';
+        }
+      }
       closeAddExpenseForm();
       await reload();
+      if (attachmentWarning) Alert.alert('تم حفظ المصروف', `تم حفظ المصروف، لكن تعذر رفع المرفقات: ${attachmentWarning}`);
     } catch (e) {
       Alert.alert('تعذر إضافة المصروف', e.message);
     } finally {
@@ -573,6 +662,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
     setEditAmount(String(item.amount || ''));
     setEditDate(normalizeDateForApi(item.expense_date || todayDate()));
     setEditDescription(item.description || '');
+    setEditNewAttachments([]);
     setEditExpenseVisible(true);
   };
   const saveExpense = async () => {
@@ -586,9 +676,18 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
         method: 'PUT',
         body: JSON.stringify({ category: editCategory, amount: Number(editAmount), expense_date: apiDate, description: editDescription }),
       }, token);
+      let attachmentWarning = '';
+      if (editNewAttachments.length > 0) {
+        try {
+          await uploadExpenseFiles(editingExpense.id, editNewAttachments);
+        } catch (error) {
+          attachmentWarning = error.message || 'تعذر رفع المرفقات';
+        }
+      }
       setEditExpenseVisible(false);
       setExpenseCategoryDetailsVisible(false);
       await reload();
+      if (attachmentWarning) Alert.alert('تم حفظ التعديل', `تم تعديل المصروف، لكن تعذر رفع المرفقات: ${attachmentWarning}`);
     } catch (e) {
       Alert.alert('تعذر تعديل المصروف', e.message);
     } finally {
@@ -670,7 +769,39 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
           </View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
             {(selectedExpenseCategory?.items || []).length === 0 ? <EmptyState icon="receipt-outline" title="لا توجد مصروفات" text="اضغط زر + لإضافة أول مصروف لهذا النوع." /> : null}
-            {(selectedExpenseCategory?.items || []).map((item) => <ExpenseRow key={item.id} item={item} onShowNote={showExpenseNote} onEdit={startEditExpense} onDelete={deleteExpense} />)}
+            {(selectedExpenseCategory?.items || []).map((item) => <ExpenseRow key={item.id} item={item} onShowNote={showExpenseNote} onShowAttachments={openExpenseAttachments} onEdit={startEditExpense} onDelete={deleteExpense} />)}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+
+    <Modal visible={attachmentsVisible} transparent animationType="fade" onRequestClose={() => setAttachmentsVisible(false)}>
+      <View style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setAttachmentsVisible(false)} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={() => setAttachmentsVisible(false)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>مرفقات المصروف</Text>
+              <Text style={styles.ownerMeta}>{displayDate(attachmentExpense?.expense_date)} - {money(attachmentExpense?.amount)}</Text>
+            </View>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            {(attachmentExpense?.attachments || []).map((attachment) => {
+              const url = expenseAttachmentUrl(attachment.url);
+              const pdf = isPdfAttachment(attachment);
+              return <View key={attachment.id} style={styles.expenseAttachmentViewerCard}>
+                {pdf
+                  ? <Pressable onPress={() => Linking.openURL(url)} style={({ pressed }) => [styles.expensePdfOpenBtn, pressed && styles.pressed]}>
+                      <Ionicons name="document-text-outline" size={28} color="#dc2626" />
+                      <View style={styles.flex1}><Text style={styles.expenseAttachmentName} numberOfLines={2}>{attachment.original_name || 'ملف PDF'}</Text><Text style={styles.expenseAttachmentHint}>اضغط لفتح ملف PDF</Text></View>
+                    </Pressable>
+                  : <Pressable onPress={() => Linking.openURL(url)} style={({ pressed }) => [pressed && styles.pressed]}>
+                      <Image source={{ uri: url }} style={styles.expenseAttachmentImage} resizeMode="contain" />
+                      <Text style={styles.expenseAttachmentName} numberOfLines={2}>{attachment.original_name || 'صورة مرفقة'}</Text>
+                    </Pressable>}
+              </View>;
+            })}
           </ScrollView>
         </View>
       </View>
@@ -690,6 +821,10 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
       setDateValue={setExpenseDate}
       description={description}
       setDescription={setDescription}
+      attachments={attachments}
+      existingAttachments={[]}
+      onPickAttachments={() => pickExpenseFiles([], attachments, setAttachments)}
+      onRemoveAttachment={(index) => setAttachments((items) => items.filter((_, i) => i !== index))}
       onSave={add}
       loading={loading}
       saveTitle="حفظ المصروف"
@@ -709,6 +844,10 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
       setDateValue={setEditDate}
       description={editDescription}
       setDescription={setEditDescription}
+      attachments={editNewAttachments}
+      existingAttachments={editingExpense?.attachments || []}
+      onPickAttachments={() => pickExpenseFiles(editingExpense?.attachments || [], editNewAttachments, setEditNewAttachments)}
+      onRemoveAttachment={(index) => setEditNewAttachments((items) => items.filter((_, i) => i !== index))}
       onSave={saveExpense}
       loading={savingExpense}
       saveTitle="حفظ التعديل"
@@ -767,7 +906,7 @@ function ExpenseTypeFormModal({ visible, onClose, categories, activeCategoryName
   </Modal>;
 }
 
-function ExpenseFormModal({ visible, onClose, title, categories, category, setCategory, categoryLocked = false, amount, setAmount, dateValue, setDateValue, description, setDescription, onSave, loading, saveTitle }) {
+function ExpenseFormModal({ visible, onClose, title, categories, category, setCategory, categoryLocked = false, amount, setAmount, dateValue, setDateValue, description, setDescription, attachments = [], existingAttachments = [], onPickAttachments, onRemoveAttachment, onSave, loading, saveTitle }) {
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
       <Pressable style={styles.modalBackdrop} onPress={onClose} />
@@ -787,6 +926,20 @@ function ExpenseFormModal({ visible, onClose, title, categories, category, setCa
           <Field label="المبلغ" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" />
           <DatePickerField label="تاريخ المصروف" value={dateValue} onChange={setDateValue} />
           <Field label="ملاحظة" value={description} onChangeText={setDescription} placeholder="وصف المصروف" multiline />
+          <Text style={styles.label}>المرفقات</Text>
+          <Pressable accessibilityLabel="إضافة مرفق للمصروف" onPress={onPickAttachments} style={({ pressed }) => [styles.expenseAttachmentPicker, pressed && styles.pressed]}>
+            <Ionicons name="attach-outline" size={23} color="#7c3aed" />
+            <View style={styles.flex1}>
+              <Text style={styles.expenseAttachmentPickerTitle}>إضافة صورتين أو ملف PDF</Text>
+              <Text style={styles.expenseAttachmentHint}>الحد الأعلى: صورتان أو ملف PDF واحد، حتى 10 م.ب للملف</Text>
+            </View>
+          </Pressable>
+          {existingAttachments.length > 0 ? <View style={styles.expenseExistingAttachments}><Ionicons name="checkmark-circle-outline" size={18} color="#0f766e" /><Text style={styles.expenseExistingAttachmentsText}>المرفقات المحفوظة: {existingAttachments.length}</Text></View> : null}
+          {attachments.map((attachment, index) => <View key={`${attachment.uri || attachment.name}-${index}`} style={styles.expenseSelectedAttachment}>
+            <Ionicons name={isPdfAttachment(attachment) ? "document-text-outline" : "image-outline"} size={20} color={isPdfAttachment(attachment) ? "#dc2626" : "#0f766e"} />
+            <Text style={styles.expenseSelectedAttachmentName} numberOfLines={1}>{attachment.name || `مرفق ${index + 1}`}</Text>
+            <Pressable accessibilityLabel="إزالة المرفق" onPress={() => onRemoveAttachment?.(index)} style={styles.expenseAttachmentRemoveBtn}><Ionicons name="close" size={17} color="#ef4444" /></Pressable>
+          </View>)}
           <PrimaryButton title={saveTitle} icon="save-outline" onPress={onSave} loading={loading} />
           <PrimaryButton title="إلغاء" icon="close-outline" onPress={onClose} variant="light" />
         </ScrollView>
@@ -1249,6 +1402,11 @@ const styles = StyleSheet.create({
   expenseCompactCard: { minHeight: 72, backgroundColor: '#fff', borderRadius: 18, paddingVertical: 12, paddingHorizontal: 12, marginBottom: 9, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#e2e8f0' },
   expenseInfo: { flex: 1, minWidth: 0 }, expenseMainLine: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, expenseDateText: { color: '#64748b', fontSize: 13, fontWeight: '700', textAlign: 'right' },
   expenseIconActions: { flexDirection: 'row', alignItems: 'center', gap: 6 }, expenseIconBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' }, expenseIconBtnMuted: { backgroundColor: '#fff' }, expenseEditIconBtn: { backgroundColor: '#ecfdf5', borderColor: '#d1fae5' }, expenseDeleteIconBtn: { backgroundColor: '#fef2f2', borderColor: '#fee2e2' },
+  expenseAttachmentIconBtn: { backgroundColor: '#f5f3ff', borderColor: '#ddd6fe', position: 'relative' }, expenseAttachmentBadge: { position: 'absolute', top: -5, right: -5, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#7c3aed', alignItems: 'center', justifyContent: 'center' }, expenseAttachmentBadgeText: { color: '#fff', fontSize: 9, fontWeight: '900' },
+  expenseAttachmentPicker: { minHeight: 64, borderRadius: 16, borderWidth: 1, borderColor: '#ddd6fe', backgroundColor: '#faf5ff', paddingHorizontal: 13, paddingVertical: 10, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 10 }, expenseAttachmentPickerTitle: { color: '#5b21b6', fontWeight: '900', fontSize: 14, textAlign: 'right' }, expenseAttachmentHint: { color: '#64748b', fontSize: 11, marginTop: 3, textAlign: 'right' },
+  expenseExistingAttachments: { minHeight: 38, borderRadius: 12, backgroundColor: '#ecfdf5', flexDirection: 'row-reverse', alignItems: 'center', gap: 7, paddingHorizontal: 10, marginBottom: 8 }, expenseExistingAttachmentsText: { color: '#0f766e', fontWeight: '800', fontSize: 12 },
+  expenseSelectedAttachment: { minHeight: 46, borderRadius: 13, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff', flexDirection: 'row-reverse', alignItems: 'center', gap: 8, paddingHorizontal: 10, marginBottom: 7 }, expenseSelectedAttachmentName: { flex: 1, color: '#334155', fontWeight: '800', fontSize: 12, textAlign: 'right' }, expenseAttachmentRemoveBtn: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center' },
+  expenseAttachmentViewerCard: { borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff', padding: 10, marginBottom: 10 }, expenseAttachmentImage: { width: '100%', height: 260, backgroundColor: '#f8fafc', borderRadius: 14, marginBottom: 8 }, expenseAttachmentName: { color: '#0f172a', fontWeight: '900', fontSize: 13, textAlign: 'right' }, expensePdfOpenBtn: { minHeight: 76, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, padding: 8, backgroundColor: '#fef2f2', borderRadius: 14 },
   categoryModalAddBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 6, elevation: 3 },
   lockedCategoryField: { minHeight: 54, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 16, paddingHorizontal: 14, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginBottom: 12 }, lockedCategoryText: { color: '#0f766e', fontWeight: '900', fontSize: 15, textAlign: 'right' },
   expenseSummaryCard: { backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#dbe5ea', padding: 16, marginBottom: 14, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, shadowColor: '#0f172a', shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 }, expenseSummaryMain: { flex: 1, alignItems: 'flex-end' }, expenseSummaryLabel: { color: '#64748b', fontSize: 12, fontWeight: '800', textAlign: 'right' }, expenseSummaryAmount: { color: '#0f172a', fontSize: 23, fontWeight: '900', textAlign: 'right', marginTop: 4 }, expenseSummaryMeta: { color: '#94a3b8', fontSize: 11, fontWeight: '700', textAlign: 'right', marginTop: 4 }, expenseSummaryAddBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
