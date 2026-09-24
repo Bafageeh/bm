@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends BaseApiController
@@ -52,6 +53,34 @@ class AuthController extends BaseApiController
         ];
     }
 
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        $data = $request->validate([
+            'username' => ['required', 'string', 'max:255', Rule::unique('users', 'username')->ignore($user->id)],
+            'phone' => ['nullable', 'string', 'max:50', Rule::unique('users', 'phone')->ignore($user->id)],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+        ], [
+            'username.required' => 'أدخل اسم المستخدم.',
+            'username.unique' => 'اسم المستخدم مستخدم لحساب آخر.',
+            'phone.unique' => 'رقم الجوال مستخدم لحساب آخر.',
+            'email.email' => 'أدخل بريدًا إلكترونيًا صحيحًا.',
+            'email.unique' => 'البريد الإلكتروني مستخدم لحساب آخر.',
+        ]);
+
+        $user->forceFill([
+            'username' => trim($data['username']),
+            'phone' => $this->nullableTrim($data['phone'] ?? null),
+            'email' => $this->nullableTrim($data['email'] ?? null),
+        ])->save();
+
+        return [
+            'message' => 'تم تحديث بيانات المستخدم بنجاح.',
+            'user' => $this->userPayload($user->fresh()),
+        ];
+    }
+
     public function changePassword(Request $request)
     {
         $data = $request->validate([
@@ -84,6 +113,12 @@ class AuthController extends BaseApiController
         $request->user()->currentAccessToken()?->delete();
 
         return ['message' => 'تم تسجيل الخروج بنجاح.'];
+    }
+
+    private function nullableTrim($value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+        return $value === '' ? null : $value;
     }
 
     private function updateLegacyUsername(User $user): void
