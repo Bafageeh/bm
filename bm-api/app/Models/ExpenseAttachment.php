@@ -11,6 +11,7 @@ class ExpenseAttachment extends Model
     protected $fillable = [
         'expense_id',
         'original_name',
+        'display_name',
         'mime_type',
         'size',
         'path',
