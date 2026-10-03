@@ -374,32 +374,22 @@ class OwnerController extends BaseApiController
             ->where('username', $login)
             ->first();
 
-        $phoneUser = $data['phone']
-            ? User::query()->where('phone', $data['phone'])->first()
-            : null;
-
-        $candidates = collect([$currentUser, $profileUser, $loginUser, $phoneUser])
+        $candidates = collect([$currentUser, $profileUser, $loginUser])
             ->filter()
             ->unique('id')
             ->values();
 
         if ($candidates->contains(fn ($candidate) => ! $candidate->isOwner())) {
             throw ValidationException::withMessages([
-                'national_id' => ['رقم الهوية أو رقم الجوال مستخدم لحساب مدير. استخدم بيانات مختلفة للمالك.'],
+                'national_id' => ['رقم الهوية أو اسم الدخول مستخدم لحساب مدير. استخدم بيانات مختلفة للمالك.'],
             ]);
         }
 
         $user = $candidates->first();
 
         if ($candidates->count() > 1) {
-            $primaryUser = $currentUser ?: $profileUser ?: $loginUser ?: $phoneUser;
+            $primaryUser = $currentUser ?: $profileUser ?: $loginUser;
             $user = $this->mergeOwnerUsers($candidates, $primaryUser);
-        }
-
-        if (! $currentUser && $user && $phoneUser && ! $profileUser && ! $loginUser && $user->username && $user->username !== $login) {
-            throw ValidationException::withMessages([
-                'national_id' => ['رقم الجوال مرتبط بمالك له رقم هوية مختلف. تحقق من رقم الهوية.'],
-            ]);
         }
 
         if (! $user) {
