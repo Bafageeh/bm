@@ -2012,8 +2012,35 @@ function OwnerOwnersReadOnlyScreen({ owners }) {
     {sortOwnersByApartment(owners || []).map((owner) => <OwnerCard key={owner.id} owner={owner} />)}
   </ScrollView>;
 }
-function OwnerExpensesReadOnlyScreen({ expenses }) {
+function OwnerExpensesReadOnlyScreen({ token, buildingId, expenses }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [dues, setDues] = useState([]);
+  const [duesLoading, setDuesLoading] = useState(true);
+  const [duesVisible, setDuesVisible] = useState(false);
+  const [paymentDue, setPaymentDue] = useState(null);
+  const [paidChoice, setPaidChoice] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState('تحويل بنكي');
+  const [paymentDate, setPaymentDate] = useState(todayDate());
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [submittingPayment, setSubmittingPayment] = useState(false);
+
+  const loadDues = async (silent = false) => {
+    if (!buildingId) return;
+    try {
+      if (!silent) setDuesLoading(true);
+      const data = await request(`/owner/expense-dues?building_id=${buildingId}`, {}, token);
+      setDues(data?.data || []);
+    } catch (error) {
+      if (!silent) Alert.alert('تعذر تحميل الفواتير المستحقة', error.message);
+    } finally {
+      if (!silent) setDuesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDues();
+  }, [buildingId, token]);
 
   const groupedExpenses = useMemo(() => {
     const groups = new Map();
@@ -2043,9 +2070,84 @@ function OwnerExpensesReadOnlyScreen({ expenses }) {
       .sort((a, b) => a.category.localeCompare(b.category, 'ar'));
   }, [expenses]);
 
+  const outstandingDues = dues.filter((due) => due.status === 'unpaid' || due.status === 'rejected');
+  const submittedDues = dues.filter((due) => due.status === 'submitted');
+  const outstandingAmount = outstandingDues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
+
+  const openPaymentDue = (due) => {
+    setPaymentDue(due);
+    setPaidChoice(due.status !== 'unpaid' || Boolean(due.payment_method));
+    setPaymentMethod(due.payment_method || 'تحويل بنكي');
+    setPaymentDate(normalizeDateForApi(due.payment_date || todayDate()));
+    setPaymentNotes(due.owner_notes || '');
+    setReceiptFile(null);
+  };
+
+  const pickReceipt = async () => {
+    try {
+      const result = await ExpoFile.pickFileAsync({
+        multipleFiles: false,
+        mimeTypes: ['image/*', 'application/pdf'],
+      });
+      if (result?.canceled || !result?.result) return;
+      const picked = Array.isArray(result.result) ? result.result[0] : result.result;
+      if (picked) setReceiptFile(picked);
+    } catch (error) {
+      Alert.alert('تعذر اختيار الإيصال', error.message || 'حدث خطأ أثناء اختيار الملف');
+    }
+  };
+
+  const submitPayment = async () => {
+    if (!paymentDue) return;
+    const apiDate = normalizeDateForApi(paymentDate);
+    if (paidChoice && !paymentMethod.trim()) return Alert.alert('تنبيه', 'اختر طريقة الدفع');
+    if (paidChoice && !/^\d{4}-\d{2}-\d{2}$/.test(apiDate)) return Alert.alert('تنبيه', 'اختر تاريخ الدفع');
+
+    try {
+      setSubmittingPayment(true);
+      const formData = new FormData();
+      formData.append('paid', paidChoice ? '1' : '0');
+      formData.append('payment_method', paidChoice ? paymentMethod.trim() : '');
+      formData.append('payment_date', paidChoice ? apiDate : '');
+      formData.append('owner_notes', paymentNotes.trim());
+
+      if (receiptFile) {
+        const name = receiptFile?.name || 'payment-receipt';
+        if (Platform.OS === 'web' && receiptFile?.file) {
+          formData.append('receipt', receiptFile.file, name);
+        } else {
+          formData.append('receipt', receiptFile, name);
+        }
+      }
+
+      await requestFormData(`/owner/expense-dues/${paymentDue.id}/submit`, formData, token);
+      setPaymentDue(null);
+      setReceiptFile(null);
+      await loadDues(true);
+      Alert.alert(paidChoice ? 'تم إرسال السداد' : 'تم تحديث الحالة', paidChoice ? 'تم إرسال بيانات الدفع للمدير للتحقق من وصول المبلغ.' : 'تم تسجيل أن الفاتورة لم تُدفع بعد.');
+    } catch (error) {
+      Alert.alert('تعذر حفظ بيانات السداد', error.message);
+    } finally {
+      setSubmittingPayment(false);
+    }
+  };
+
   return <>
     <ScrollView contentContainerStyle={styles.screenContent}>
       <SectionTitle icon="receipt-outline" title="المصروفات" />
+
+      <Pressable onPress={() => { loadDues(true); setDuesVisible(true); }} style={({ pressed }) => [styles.ownerPaymentPortalCard, pressed && styles.pressed]}>
+        <View style={styles.ownerPaymentPortalIcon}><Ionicons name="wallet-outline" size={24} color="#0f766e" /></View>
+        <View style={styles.flex1}>
+          <Text style={styles.ownerPaymentPortalTitle}>سداد الفواتير</Text>
+          <Text style={styles.ownerPaymentPortalText}>
+            {outstandingDues.length > 0 ? `عليك ${money(outstandingAmount)} في ${outstandingDues.length} فاتورة` : 'لا توجد فواتير غير مسددة حاليًا'}
+          </Text>
+          {submittedDues.length > 0 ? <Text style={styles.ownerPaymentPortalPending}>{submittedDues.length} عملية بانتظار تحقق المدير</Text> : null}
+        </View>
+        {outstandingDues.length > 0 ? <View style={[styles.badge, styles.badgeDue]}><Text style={styles.badgeText}>{outstandingDues.length}</Text></View> : <Ionicons name="chevron-back" size={20} color="#64748b" />}
+      </Pressable>
+
       {(expenses || []).length === 0 ? <EmptyState icon="receipt-outline" title="لا توجد مصروفات" text="لا توجد مصروفات مسجلة حاليًا." /> : null}
 
       {groupedExpenses.map((group) => <Pressable
@@ -2069,6 +2171,98 @@ function OwnerExpensesReadOnlyScreen({ expenses }) {
       </Pressable>)}
     </ScrollView>
 
+    <Modal visible={duesVisible} transparent animationType="fade" onRequestClose={() => setDuesVisible(false)}>
+      <View style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setDuesVisible(false)} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={() => setDuesVisible(false)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>فواتيري وسدادها</Text>
+              <Text style={styles.ownerMeta}>المستحق الآن: {money(outstandingAmount)}</Text>
+            </View>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            {duesLoading ? <ActivityIndicator color="#0f766e" size="large" /> : null}
+            {!duesLoading && dues.length === 0 ? <EmptyState icon="wallet-outline" title="لا توجد فواتير" text="لا توجد فواتير موزعة عليك حتى الآن." /> : null}
+            {dues.map((due) => <Pressable
+              key={due.id}
+              disabled={due.status === 'confirmed'}
+              onPress={() => openPaymentDue(due)}
+              style={({ pressed }) => [styles.dueCard, due.status === 'confirmed' && styles.dueCardConfirmed, pressed && styles.pressed]}
+            >
+              <View style={styles.dueCardTop}>
+                <View style={styles.flex1}>
+                  <Text style={styles.cardTitle}>{due?.expense?.category || 'فاتورة'}</Text>
+                  <Text style={styles.cardSub}>{displayDate(due?.expense?.expense_date)}</Text>
+                </View>
+                <View style={[styles.badge, expenseDueBadgeStyle(due.status)]}><Text style={styles.badgeText}>{expenseDueStatusLabel(due.status)}</Text></View>
+              </View>
+              <Text style={styles.dueAmountText}>{money(due.amount)}</Text>
+              {due.status === 'rejected' && due.manager_notes ? <Text style={styles.dueManagerNote}>رد المدير: {due.manager_notes}</Text> : null}
+              {due.status === 'submitted' ? <Text style={styles.dueActionHint}>أرسلت بيانات الدفع وهي بانتظار تحقق المدير.</Text> : null}
+              {due.status === 'unpaid' || due.status === 'rejected' ? <Text style={styles.dueActionHint}>اضغط لتحديد حالة الدفع وإرسال الإثبات.</Text> : null}
+            </Pressable>)}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+
+    <Modal visible={!!paymentDue} transparent animationType="fade" onRequestClose={() => setPaymentDue(null)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setPaymentDue(null)} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={() => setPaymentDue(null)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>سداد الفاتورة</Text>
+              <Text style={styles.ownerMeta}>{paymentDue?.expense?.category || ''} • {money(paymentDue?.amount || 0)}</Text>
+            </View>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            <Text style={styles.label}>هل تم دفع المبلغ؟</Text>
+            <View style={styles.expenseScopeRow}>
+              <Pressable onPress={() => setPaidChoice(true)} style={[styles.expenseScopeChoice, paidChoice && styles.expenseScopeChoiceActive]}>
+                <Ionicons name="checkmark-circle-outline" size={19} color={paidChoice ? "#0f766e" : "#64748b"} />
+                <Text style={[styles.expenseScopeChoiceText, paidChoice && styles.expenseScopeChoiceTextActive]}>نعم، دفعت</Text>
+              </Pressable>
+              <Pressable onPress={() => setPaidChoice(false)} style={[styles.expenseScopeChoice, !paidChoice && styles.expenseScopeChoiceActive]}>
+                <Ionicons name="close-outline" size={19} color={!paidChoice ? "#0f766e" : "#64748b"} />
+                <Text style={[styles.expenseScopeChoiceText, !paidChoice && styles.expenseScopeChoiceTextActive]}>لم أدفع بعد</Text>
+              </Pressable>
+            </View>
+
+            {paidChoice ? <>
+              <Text style={styles.label}>طريقة الدفع</Text>
+              <View style={styles.paymentMethodRow}>
+                {['تحويل بنكي', 'نقدي', 'أخرى'].map((method) => <Pressable key={method} onPress={() => setPaymentMethod(method)} style={[styles.chip, paymentMethod === method && styles.chipActive]}>
+                  <Text style={[styles.chipText, paymentMethod === method && styles.chipTextActive]}>{method}</Text>
+                </Pressable>)}
+              </View>
+              <DatePickerField label="تاريخ الدفع" value={paymentDate} onChange={setPaymentDate} />
+              <Field label="ملاحظة" value={paymentNotes} onChangeText={setPaymentNotes} placeholder="رقم الحوالة أو أي توضيح للمدير" multiline />
+
+              <Text style={styles.label}>إيصال الدفع - اختياري</Text>
+              <Pressable onPress={pickReceipt} style={({ pressed }) => [styles.expenseAttachmentPicker, pressed && styles.pressed]}>
+                <Ionicons name="attach-outline" size={22} color="#7c3aed" />
+                <View style={styles.flex1}>
+                  <Text style={styles.expenseAttachmentPickerTitle}>{receiptFile ? (receiptFile.name || 'تم اختيار الإيصال') : 'إرفاق صورة أو PDF للإيصال'}</Text>
+                  <Text style={styles.expenseAttachmentHint}>حتى 10 م.ب</Text>
+                </View>
+              </Pressable>
+              {paymentDue?.receipt_url && !receiptFile ? <Pressable onPress={() => Linking.openURL(expenseAttachmentUrl(paymentDue.receipt_url))} style={({ pressed }) => [styles.receiptOpenButton, pressed && styles.pressed]}>
+                <Ionicons name="eye-outline" size={19} color="#7c3aed" />
+                <Text style={styles.receiptOpenButtonText}>عرض الإيصال المرسل سابقًا</Text>
+              </Pressable> : null}
+            </> : <Field label="ملاحظة - اختياري" value={paymentNotes} onChangeText={setPaymentNotes} placeholder="يمكنك كتابة سبب التأخير أو أي ملاحظة" multiline />}
+
+            <PrimaryButton title={paidChoice ? "إرسال للمدير للتحقق" : "حفظ أني لم أدفع بعد"} icon={paidChoice ? "checkmark-circle-outline" : "save-outline"} onPress={submitPayment} loading={submittingPayment} />
+            <PrimaryButton title="إلغاء" icon="close-outline" onPress={() => setPaymentDue(null)} variant="light" />
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+
     <Modal visible={!!selectedCategory} transparent animationType="fade" onRequestClose={() => setSelectedCategory(null)}>
       <View style={styles.modalRoot}>
         <Pressable style={styles.modalBackdrop} onPress={() => setSelectedCategory(null)} />
@@ -2082,10 +2276,13 @@ function OwnerExpensesReadOnlyScreen({ expenses }) {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
-            {(selectedCategory?.items || []).map((item) => <View key={item.id} style={[styles.rowCard, { marginBottom: 10 }]}>
+            {(selectedCategory?.items || []).map((item) => <View key={item.due_id || item.id} style={[styles.rowCard, { marginBottom: 10 }]}>
               <View style={styles.rowIcon}><Ionicons name="receipt-outline" size={20} color="#0f766e" /></View>
               <View style={styles.flex1}>
-                <Text style={styles.cardTitle}>{displayDate(item.expense_date)}</Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Text style={styles.cardTitle}>{displayDate(item.expense_date)}</Text>
+                  {item.due_status ? <View style={[styles.badge, expenseDueBadgeStyle(item.due_status)]}><Text style={styles.badgeText}>{expenseDueStatusLabel(item.due_status)}</Text></View> : null}
+                </View>
                 {item.description ? <Text style={[styles.cardSub, { marginTop: 5 }]}>{displayTextDates(item.description)}</Text> : null}
                 <Text style={[styles.cardSub, { marginTop: 7 }]}>إجمالي المصروف: {money(item.amount)}</Text>
                 <Text style={styles.cardSub}>نصيبك: {money(item.owner_share)}</Text>
