@@ -1,5 +1,4 @@
 name: Build BM APK
-# manual build trigger 2026-10-03 chat-release
 
 on:
   workflow_dispatch:
@@ -32,30 +31,42 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install dependencies
         working-directory: bm-mobile
         run: npm install --legacy-peer-deps
 
+      - name: Apply current BM mobile patches
+        working-directory: bm-mobile
+        run: npm run patch-ui
+
       - name: Generate Android project
         working-directory: bm-mobile
-        run: npx expo prebuild --platform android --clean
+        run: npx expo prebuild --platform android --clean --non-interactive
 
-      - name: Build APK
+      - name: Build standalone release APK
         working-directory: bm-mobile/android
         run: |
           chmod +x gradlew
           printf '\norg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8\norg.gradle.parallel=false\n' >> gradle.properties
-          ./gradlew assembleDebug --no-daemon --max-workers=2
-          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+          ./gradlew :app:assembleRelease --no-daemon --max-workers=2 --stacktrace
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
           test -f "$APK_PATH"
-          mkdir -p ../../apk-output
-          cp "$APK_PATH" ../../apk-output/BM-Management.apk
-          ls -lh ../../apk-output/BM-Management.apk
 
-      - name: Upload APK
+          echo "Checking that the standalone JS bundle is packaged inside the APK..."
+          unzip -l "$APK_PATH" | tee /tmp/apk-files.txt
+          grep -E "assets/index\.android\.bundle|assets/.*\.bundle" /tmp/apk-files.txt
+
+          mkdir -p ../../apk-output
+          cp "$APK_PATH" ../../apk-output/BM-Management-Release.apk
+          ls -lh ../../apk-output/BM-Management-Release.apk
+
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: BM-Management-APK
-          path: apk-output/BM-Management.apk
+          name: BM-Management-Release-APK
+          path: apk-output/BM-Management-Release.apk
           if-no-files-found: error
           retention-days: 30
