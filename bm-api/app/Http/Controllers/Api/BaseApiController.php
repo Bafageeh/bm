@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Building;
+use App\Models\Owner;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
@@ -21,7 +23,7 @@ abstract class BaseApiController extends Controller
             return;
         }
 
-        if ($user->ownerProfiles()->where('building_id', $building->id)->exists()) {
+        if ($this->ownerProfilesForRequest($request)->contains(fn ($owner) => (int) $owner->building_id === (int) $building->id)) {
             return;
         }
 
@@ -41,6 +43,101 @@ abstract class BaseApiController extends Controller
         }
 
         throw new AccessDeniedHttpException('هذه العملية متاحة لمدير المبنى فقط.');
+    }
+
+    protected function requestLoginIdentity(Request $request): array
+    {
+        $tokenName = (string) ($request->user()?->currentAccessToken()?->name ?? '');
+
+        if (str_starts_with($tokenName, 'bm-mobile|')) {
+            $parts = explode('|', $tokenName, 3);
+
+            if (count($parts) === 3) {
+                $decoded = base64_decode(strtr($parts[2], '-_', '+/'), true);
+
+                if ($decoded !== false && $decoded !== '') {
+                    return [
+                        'type' => $parts[1],
+                        'value' => $decoded,
+                    ];
+                }
+            }
+        }
+
+        $user = $request->user();
+
+        return [
+            'type' => 'user',
+            'value' => (string) ($user?->username ?: $user?->phone ?: $user?->email ?: ''),
+        ];
+    }
+
+    protected function ownerProfilesForRequest(Request $request, array $with = [])
+    {
+        $identity = $this->requestLoginIdentity($request);
+
+        return $this->ownerProfilesForIdentity(
+            $request->user(),
+            $identity['type'] ?? null,
+            $identity['value'] ?? null,
+            $with
+        );
+    }
+
+    protected function ownerProfilesForIdentity(User $user, ?string $type, ?string $value, array $with = [])
+    {
+        $value = trim((string) ($value ?? ''));
+        $query = Owner::query();
+
+        if ($with) {
+            $query->with($with);
+        }
+
+        if ($value !== '') {
+            if ($type === 'phone') {
+                $query->where('phone', $value);
+            } elseif ($type === 'national_id') {
+                $query->where('national_id', $value);
+            } elseif ($type === 'username') {
+                $query->where(function ($ownerQuery) use ($value) {
+                    $ownerQuery
+                        ->where('national_id', $value)
+                        ->orWhereHas('user', fn ($userQuery) => $userQuery->where('username', $value));
+                });
+            } elseif ($type === 'email') {
+                $query->where(function ($ownerQuery) use ($value) {
+                    $ownerQuery
+                        ->where('email', $value)
+                        ->orWhereHas('user', fn ($userQuery) => $userQuery->where('email', $value));
+                });
+            } else {
+                $query->where(function ($ownerQuery) use ($user, $value) {
+                    $ownerQuery
+                        ->where('user_id', $user->id)
+                        ->orWhere('national_id', $value)
+                        ->orWhere('phone', $value)
+                        ->orWhereHas('user', fn ($userQuery) => $userQuery->where('username', $value));
+                });
+            }
+
+            return $query->get();
+        }
+
+        $nationalIds = $user->ownerProfiles()
+            ->whereNotNull('national_id')
+            ->pluck('national_id')
+            ->map(fn ($item) => trim((string) $item))
+            ->filter()
+            ->unique()
+            ->values();
+
+        return $query
+            ->when(
+                $nationalIds->isNotEmpty(),
+                fn ($ownerQuery) => $ownerQuery->whereIn('national_id', $nationalIds->all()),
+                fn ($ownerQuery) => $ownerQuery->where('user_id', $user->id)
+            )
+            ->get();
     }
 
     protected function buildingStats(Building $building): array
