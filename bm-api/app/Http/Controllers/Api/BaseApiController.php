@@ -17,11 +17,11 @@ abstract class BaseApiController extends Controller
             return;
         }
 
-        if ($user->isManager() && $user->managedBuildings()->whereKey($building->id)->exists()) {
+        if ($user->managedBuildings()->whereKey($building->id)->exists()) {
             return;
         }
 
-        if ($user->isOwner() && $user->ownerProfiles()->where('building_id', $building->id)->exists()) {
+        if ($user->ownerProfiles()->where('building_id', $building->id)->exists()) {
             return;
         }
 
@@ -36,7 +36,7 @@ abstract class BaseApiController extends Controller
             return;
         }
 
-        if ($user->isManager() && $user->managedBuildings()->whereKey($building->id)->exists()) {
+        if ($user->managedBuildings()->whereKey($building->id)->exists()) {
             return;
         }
 
