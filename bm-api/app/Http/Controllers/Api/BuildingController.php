@@ -17,29 +17,51 @@ class BuildingController extends BaseApiController
     {
         $user = $request->user();
 
-        $buildings = $user->isAdmin()
-            ? Building::query()->withCount(['apartments', 'owners', 'expenses', 'payments'])->orderBy('name')->get()
-            : $user->managedBuildings()->withCount(['apartments', 'owners', 'expenses', 'payments'])->orderBy('name')->get();
+        $managedBuildings = $user->isAdmin()
+            ? Building::query()->orderBy('name')->get()
+            : $user->managedBuildings()->orderBy('name')->get();
 
-        if ($user->isOwner()) {
-            $nationalIds = $user->ownerProfiles()
-                ->whereNotNull('national_id')
-                ->pluck('national_id')
-                ->map(fn ($value) => trim((string) $value))
-                ->filter()
-                ->unique()
+        $nationalIds = $user->ownerProfiles()
+            ->whereNotNull('national_id')
+            ->pluck('national_id')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $ownerProfiles = \App\Models\Owner::query()
+            ->with('building')
+            ->when(
+                $nationalIds->isNotEmpty(),
+                fn ($query) => $query->whereIn('national_id', $nationalIds->all()),
+                fn ($query) => $query->where('user_id', $user->id)
+            )
+            ->get();
+
+        $ownedBuildings = $ownerProfiles
+            ->pluck('building')
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        $managedIds = $managedBuildings->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $ownedIds = $ownedBuildings->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $buildings = $user->isAdmin()
+            ? $managedBuildings
+            : $managedBuildings
+                ->concat($ownedBuildings)
+                ->unique('id')
+                ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
                 ->values();
 
-            $profiles = \App\Models\Owner::query()
-                ->with('building')
-                ->when($nationalIds->isNotEmpty(), fn ($query) => $query->whereIn('national_id', $nationalIds->all()), fn ($query) => $query->where('user_id', $user->id))
-                ->get();
+        $buildings->each(function (Building $building) use ($user, $managedIds, $ownedIds) {
+            $building->loadCount(['apartments', 'owners', 'expenses', 'payments']);
+            $building->setAttribute('can_manage', $user->isAdmin() || in_array((int) $building->id, $managedIds, true));
+            $building->setAttribute('is_owner', in_array((int) $building->id, $ownedIds, true));
+        });
 
-            $buildings = $profiles->pluck('building')->filter()->unique('id')->values();
-            $buildings->each->loadCount(['apartments', 'owners', 'expenses', 'payments']);
-        }
-
-        return ['data' => $buildings];
+        return ['data' => $buildings->values()];
     }
 
     public function store(Request $request)
@@ -127,6 +149,64 @@ class BuildingController extends BaseApiController
         return [
             'message' => 'تم تحديث بيانات المبنى',
             'data' => $building->fresh()->loadCount(['apartments', 'owners', 'expenses', 'payments']),
+        ];
+    }
+
+    public function transferManagement(Request $request, Building $building)
+    {
+        $this->assertManagerOrAdmin($request, $building);
+
+        $data = $request->validate([
+            'owner_id' => ['required', 'integer'],
+        ], [
+            'owner_id.required' => 'اختر أحد ملاك المبنى.',
+        ]);
+
+        $owner = $building->owners()
+            ->with('user')
+            ->whereKey($data['owner_id'])
+            ->first();
+
+        if (! $owner) {
+            throw ValidationException::withMessages([
+                'owner_id' => ['المالك المحدد لا يتبع لهذا المبنى.'],
+            ]);
+        }
+
+        if (! $owner->user_id || ! $owner->user) {
+            throw ValidationException::withMessages([
+                'owner_id' => ['لا يوجد حساب دخول مرتبط بهذا المالك.'],
+            ]);
+        }
+
+        if ($owner->user->status !== 'active') {
+            throw ValidationException::withMessages([
+                'owner_id' => ['حساب المالك المحدد غير نشط.'],
+            ]);
+        }
+
+        $currentUser = $request->user();
+
+        if (! $currentUser->isAdmin() && (int) $owner->user_id === (int) $currentUser->id) {
+            throw ValidationException::withMessages([
+                'owner_id' => ['اختر مالكًا آخر لنقل إدارة المبنى إليه.'],
+            ]);
+        }
+
+        DB::transaction(function () use ($building, $owner) {
+            $building->managers()->sync([
+                $owner->user_id => ['role' => 'manager'],
+            ]);
+        });
+
+        return [
+            'message' => 'تم نقل إدارة المبنى بنجاح.',
+            'data' => [
+                'building_id' => $building->id,
+                'owner_id' => $owner->id,
+                'manager_user_id' => $owner->user_id,
+                'manager_name' => $owner->name,
+            ],
         ];
     }
 
