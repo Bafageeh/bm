@@ -1236,6 +1236,11 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
       setDateValue={setExpenseDate}
       description={description}
       setDescription={setDescription}
+      owners={owners}
+      scope={scope}
+      setScope={setScope}
+      selectedOwnerIds={selectedOwnerIds}
+      setSelectedOwnerIds={setSelectedOwnerIds}
       attachments={attachments}
       existingAttachments={[]}
       onPickAttachments={() => pickExpenseFiles([], attachments, setAttachments)}
@@ -1260,6 +1265,11 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
       setDateValue={setEditDate}
       description={editDescription}
       setDescription={setEditDescription}
+      owners={owners}
+      scope={editScope}
+      setScope={setEditScope}
+      selectedOwnerIds={editSelectedOwnerIds}
+      setSelectedOwnerIds={setEditSelectedOwnerIds}
       attachments={editNewAttachments}
       existingAttachments={editingExpense?.attachments || []}
       onPickAttachments={() => pickExpenseFiles(editingExpense?.attachments || [], editNewAttachments, setEditNewAttachments)}
@@ -1323,7 +1333,7 @@ function ExpenseTypeFormModal({ visible, onClose, categories, activeCategoryName
   </Modal>;
 }
 
-function ExpenseFormModal({ visible, onClose, title, categories, category, setCategory, categoryLocked = false, amount, setAmount, dateValue, setDateValue, description, setDescription, attachments = [], existingAttachments = [], onPickAttachments, onRemoveAttachment, onRenameAttachment, onSave, loading, saveTitle }) {
+function ExpenseFormModal({ visible, onClose, title, categories, category, setCategory, categoryLocked = false, amount, setAmount, dateValue, setDateValue, description, setDescription, owners = [], scope = 'all', setScope, selectedOwnerIds = [], setSelectedOwnerIds, attachments = [], existingAttachments = [], onPickAttachments, onRemoveAttachment, onRenameAttachment, onSave, loading, saveTitle }) {
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
       <Pressable style={styles.modalBackdrop} onPress={onClose} />
