@@ -38,4 +38,9 @@ class Owner extends Model
     {
         return $this->hasMany(OwnerPayment::class);
     }
+
+    public function expenseDues(): HasMany
+    {
+        return $this->hasMany(ExpenseOwnerDue::class);
+    }
 }
