@@ -2122,25 +2122,33 @@ function ChatScreen({ token, buildingId, currentUserId }) {
     </Modal>
 
     <Modal visible={conversationVisible} animationType="slide" onRequestClose={() => setConversationVisible(false)}>
-      <SafeAreaView style={styles.chatConversationScreen}>
-        <View style={styles.chatConversationHeader}>
-          <Pressable onPress={() => setConversationVisible(false)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
-          <View style={styles.flex1}>
-            <Text style={styles.chatConversationHeaderTitle}>{activeConversation?.title || 'المحادثة'}</Text>
-            <Text numberOfLines={1} style={styles.chatConversationHeaderSub}>{(activeConversation?.participants || []).map((p) => p.name).join('، ')}</Text>
+      <KeyboardAvoidingView
+        style={styles.flex1}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <SafeAreaView style={styles.chatConversationScreen}>
+          <View style={styles.chatConversationHeader}>
+            <Pressable onPress={() => setConversationVisible(false)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.chatConversationHeaderTitle}>{activeConversation?.title || 'المحادثة'}</Text>
+              <Text numberOfLines={1} style={styles.chatConversationHeaderSub}>{(activeConversation?.participants || []).map((p) => p.name).join('، ')}</Text>
+            </View>
           </View>
-        </View>
 
-        {loadingMessages ? <LoadingScreen /> : <ScrollView contentContainerStyle={styles.chatMessagesContent}>
-          {messages.length === 0 ? <EmptyState icon="chatbubble-outline" title="لا توجد رسائل" text="ابدأ بإرسال أول رسالة." /> : null}
-          {messages.map((message) => <View key={message.id} style={[styles.chatMessageBubble, message.is_mine ? styles.chatMessageMine : styles.chatMessageOther]}>
-            {!message.is_mine ? <Text style={styles.chatMessageSender}>{message.sender_name}</Text> : null}
-            <Text style={[styles.chatMessageText, message.is_mine && styles.chatMessageTextMine]}>{message.body}</Text>
-            <Text style={[styles.chatMessageTime, message.is_mine && styles.chatMessageTimeMine]}>{formatMessageTime(message.created_at)}</Text>
-          </View>)}
-        </ScrollView>}
+          {loadingMessages ? <LoadingScreen /> : <ScrollView
+            style={styles.flex1}
+            contentContainerStyle={styles.chatMessagesContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {messages.length === 0 ? <EmptyState icon="chatbubble-outline" title="لا توجد رسائل" text="ابدأ بإرسال أول رسالة." /> : null}
+            {messages.map((message) => <View key={message.id} style={[styles.chatMessageBubble, message.is_mine ? styles.chatMessageMine : styles.chatMessageOther]}>
+              {!message.is_mine ? <Text style={styles.chatMessageSender}>{message.sender_name}</Text> : null}
+              <Text style={[styles.chatMessageText, message.is_mine && styles.chatMessageTextMine]}>{message.body}</Text>
+              <Text style={[styles.chatMessageTime, message.is_mine && styles.chatMessageTimeMine]}>{formatMessageTime(message.created_at)}</Text>
+            </View>)}
+          </ScrollView>}
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.chatComposer}>
             <TextInput
               value={messageText}
@@ -2154,8 +2162,8 @@ function ChatScreen({ token, buildingId, currentUserId }) {
               {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="chatbubble-outline" size={20} color="#fff" />}
             </Pressable>
           </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </Modal>
   </>;
 }
