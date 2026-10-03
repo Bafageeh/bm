@@ -35,10 +35,6 @@ jobs:
         working-directory: bm-mobile
         run: npm install --legacy-peer-deps
 
-      - name: Apply current BM mobile patches
-        working-directory: bm-mobile
-        run: npm run patch-ui
-
       - name: Generate Android project
         working-directory: bm-mobile
         run: npx expo prebuild --platform android --clean --non-interactive
