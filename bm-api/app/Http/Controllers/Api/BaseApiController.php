@@ -53,7 +53,12 @@ abstract class BaseApiController extends Controller
             $parts = explode('|', $tokenName, 3);
 
             if (count($parts) === 3) {
-                $decoded = base64_decode(strtr($parts[2], '-_', '+/'), true);
+                $encoded = strtr($parts[2], '-_', '+/');
+                $padding = strlen($encoded) % 4;
+                if ($padding !== 0) {
+                    $encoded .= str_repeat('=', 4 - $padding);
+                }
+                $decoded = base64_decode($encoded, true);
 
                 if ($decoded !== false && $decoded !== '') {
                     return [
