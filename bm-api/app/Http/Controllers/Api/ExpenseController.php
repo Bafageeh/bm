@@ -237,17 +237,21 @@ class ExpenseController extends BaseApiController
             return [];
         }
 
-        $totalApartments = $building->apartments()->count();
-        if ($totalApartments <= 0) {
+        $ownersWithApartments = $owners->filter(fn ($owner) => (int) $owner->apartments_count > 0)->values();
+        $totalOwnedApartments = (int) $ownersWithApartments->sum('apartments_count');
+        if ($totalOwnedApartments <= 0) {
             return $this->equalAllocations((float) $expense->amount, $owners->pluck('id')->all());
         }
 
         $allocations = [];
-        foreach ($owners as $owner) {
-            $share = round(((float) $expense->amount / $totalApartments) * (int) $owner->apartments_count, 2);
-            if ($share > 0) {
-                $allocations[(int) $owner->id] = $share;
-            }
+        $remaining = round((float) $expense->amount, 2);
+        foreach ($ownersWithApartments as $index => $owner) {
+            $share = $index === $ownersWithApartments->count() - 1
+                ? $remaining
+                : round(((float) $expense->amount / $totalOwnedApartments) * (int) $owner->apartments_count, 2);
+
+            $allocations[(int) $owner->id] = $share;
+            $remaining = round($remaining - $share, 2);
         }
 
         return $allocations;
