@@ -345,7 +345,7 @@ function Field({ label, value, onChangeText, placeholder, keyboardType = 'defaul
 function PrimaryButton({ title, icon, onPress, loading, variant = 'primary' }) {
   return <Pressable disabled={loading} onPress={onPress} style={({ pressed }) => [styles.button, styles[`button_${variant}`], pressed && styles.pressed]}>{loading ? <ActivityIndicator color={variant === 'light' ? '#0f766e' : '#fff'} /> : <Ionicons name={icon} size={20} color={variant === 'light' ? '#0f766e' : '#fff'} />}<Text style={[styles.buttonText, variant === 'light' && styles.buttonTextLight]}>{title}</Text></Pressable>;
 }
-function Header({ title, subtitle, onLogout, onBack, token, managerMode = false }) {
+function Header({ title, subtitle, onLogout, onBack, token, managerMode = false, onNotificationPress }) {
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -399,14 +399,20 @@ function Header({ title, subtitle, onLogout, onBack, token, managerMode = false 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
             {notificationsLoading ? <ActivityIndicator color="#0f766e" size="large" /> : null}
             {!notificationsLoading && notifications.length === 0 ? <EmptyState icon="notifications-outline" title="لا توجد تنبيهات" text="ستظهر هنا تنبيهات المصروفات الجديدة والتعديلات." /> : null}
-            {notifications.map((item) => <View key={item.id} style={styles.notificationCard}>
+            {notifications.map((item) => <Pressable
+              key={item.id}
+              disabled={!onNotificationPress || !item?.data?.tab}
+              onPress={() => { setNotificationsVisible(false); onNotificationPress?.(item); }}
+              style={({ pressed }) => [styles.notificationCard, pressed && styles.pressed]}
+            >
               <View style={styles.notificationIcon}><Ionicons name="bell-ring-outline" size={20} color="#7c3aed" /></View>
               <View style={styles.flex1}>
                 <Text style={styles.notificationTitle}>{item.title}</Text>
                 <Text style={styles.notificationBody}>{item.body}</Text>
+                {onNotificationPress && item?.data?.tab ? <Text style={styles.notificationLinkText}>فتح التفاصيل</Text> : null}
                 <Text style={styles.notificationDate}>{item.created_at ? new Date(item.created_at).toLocaleString('ar-SA') : ''}</Text>
               </View>
-            </View>)}
+            </Pressable>)}
           </ScrollView>
         </View>
       </View>
