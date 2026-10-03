@@ -916,6 +916,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
   const add = async () => {
     const apiDate = normalizeDateForApi(expenseDate);
     if (!amount) return Alert.alert('تنبيه', 'أدخل مبلغ المصروف');
+    if (scope === 'selected' && selectedOwnerIds.length === 0) return Alert.alert('تنبيه', 'اختر مالكًا واحدًا على الأقل');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(apiDate)) return Alert.alert('تنبيه', 'اختر تاريخ المصروف');
     try {
       setLoading(true);
@@ -957,6 +958,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
     const apiDate = normalizeDateForApi(editDate);
     if (!editingExpense) return;
     if (!editAmount) return Alert.alert('تنبيه', 'أدخل مبلغ المصروف');
+    if (editScope === 'selected' && editSelectedOwnerIds.length === 0) return Alert.alert('تنبيه', 'اختر مالكًا واحدًا على الأقل');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(apiDate)) return Alert.alert('تنبيه', 'اختر تاريخ المصروف');
     try {
       setSavingExpense(true);
@@ -1004,6 +1006,32 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
     const note = displayTextDates(item.description || '').trim();
     Alert.alert('ملاحظة المصروف', note || 'لا توجد ملاحظة لهذا المصروف.');
   };
+
+  const openDueReview = (due) => {
+    setReviewDue(due);
+    setManagerReviewNotes(due?.manager_notes || '');
+  };
+
+  const verifyDue = async (decision) => {
+    if (!reviewDue) return;
+    try {
+      setVerifyingDue(true);
+      await request(`/buildings/${buildingId}/expense-dues/${reviewDue.id}/verify`, {
+        method: 'POST',
+        body: JSON.stringify({ decision, manager_notes: managerReviewNotes.trim() }),
+      }, token);
+      setReviewDue(null);
+      setManagerReviewNotes('');
+      await loadManagerDues(true);
+      await reload();
+    } catch (error) {
+      Alert.alert('تعذر توثيق السداد', error.message);
+    } finally {
+      setVerifyingDue(false);
+    }
+  };
+
+  const submittedDuesCount = Number(managerDueCounts?.submitted || 0);
 
   return <View style={styles.screenWrapper}>
     <ScrollView contentContainerStyle={[styles.screenContent, styles.expensesScreenContent]}>
