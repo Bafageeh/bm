@@ -196,19 +196,36 @@ class AuthController extends BaseApiController
 
     private function userPayload(User $user): array
     {
-        $buildings = $user->isAdmin()
+        $managedBuildings = $user->isAdmin()
             ? \App\Models\Building::query()->orderBy('name')->get()
             : $user->managedBuildings()->orderBy('name')->get();
 
-        if ($user->isOwner()) {
-            $nationalIds = $this->ownerIdentityNationalIds($user);
-            $profiles = \App\Models\Owner::query()
-                ->with('building')
-                ->when($nationalIds->isNotEmpty(), fn ($query) => $query->whereIn('national_id', $nationalIds->all()), fn ($query) => $query->where('user_id', $user->id))
-                ->get();
+        $nationalIds = $this->ownerIdentityNationalIds($user);
+        $ownerProfiles = \App\Models\Owner::query()
+            ->with('building')
+            ->when(
+                $nationalIds->isNotEmpty(),
+                fn ($query) => $query->whereIn('national_id', $nationalIds->all()),
+                fn ($query) => $query->where('user_id', $user->id)
+            )
+            ->get();
 
-            $buildings = $profiles->pluck('building')->filter()->unique('id')->values();
-        }
+        $ownedBuildings = $ownerProfiles
+            ->pluck('building')
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        $managedIds = $managedBuildings->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $ownedIds = $ownedBuildings->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $buildings = $user->isAdmin()
+            ? $managedBuildings
+            : $managedBuildings
+                ->concat($ownedBuildings)
+                ->unique('id')
+                ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+                ->values();
 
         return [
             'id' => $user->id,
@@ -217,11 +234,14 @@ class AuthController extends BaseApiController
             'username' => $user->username,
             'phone' => $user->phone,
             'role' => $user->role,
+            'has_managed_buildings' => $user->isAdmin() || count($managedIds) > 0,
             'buildings' => $buildings->map(fn ($building) => [
                 'id' => $building->id,
                 'name' => $building->name,
                 'district' => $building->district,
                 'city' => $building->city,
+                'can_manage' => $user->isAdmin() || in_array((int) $building->id, $managedIds, true),
+                'is_owner' => in_array((int) $building->id, $ownedIds, true),
             ])->values(),
         ];
     }
