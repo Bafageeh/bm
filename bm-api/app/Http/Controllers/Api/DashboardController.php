@@ -56,20 +56,17 @@ class DashboardController extends BaseApiController
     public function owner(Request $request)
     {
         $user = $request->user();
-        abort_unless($user->isOwner(), 403, 'هذه الشاشة خاصة بالملاك فقط.');
 
-        $nationalIds = $user->ownerProfiles()
-            ->whereNotNull('national_id')
-            ->pluck('national_id')
-            ->map(fn ($value) => trim((string) $value))
-            ->filter()
-            ->unique()
-            ->values();
+        $profiles = $this->ownerProfilesForRequest(
+            $request,
+            ['building', 'apartments', 'payments']
+        );
 
-        $profiles = \App\Models\Owner::query()
-            ->with(['building', 'apartments', 'payments'])
-            ->when($nationalIds->isNotEmpty(), fn ($query) => $query->whereIn('national_id', $nationalIds->all()), fn ($query) => $query->where('user_id', $user->id))
-            ->get();
+        abort_unless(
+            $profiles->isNotEmpty(),
+            403,
+            'لا توجد بيانات ملكية مرتبطة ببيانات الدخول الحالية.'
+        );
 
         return [
             'owners' => $profiles->map(function ($owner) {
