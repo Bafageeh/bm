@@ -16,35 +16,63 @@ class AuthController extends BaseApiController
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::query()
-            ->where('email', $data['login'])
-            ->orWhere('username', $data['login'])
-            ->first();
+        $login = trim((string) $data['login']);
+        $password = (string) $data['password'];
+        $identityType = null;
+        $user = null;
+
+        $user = User::query()->where('username', $login)->first();
+        if ($user) {
+            $identityType = 'username';
+        }
 
         if (! $user) {
-            $phoneUsers = User::query()
-                ->where('phone', $data['login'])
-                ->limit(2)
-                ->get();
-
-            if ($phoneUsers->count() === 1) {
-                $user = $phoneUsers->first();
-            } elseif ($phoneUsers->count() > 1) {
-                throw ValidationException::withMessages([
-                    'login' => ['رقم الجوال مرتبط بأكثر من حساب. استخدم رقم الهوية أو اسم المستخدم للدخول.'],
-                ]);
+            $user = User::query()->where('email', $login)->first();
+            if ($user) {
+                $identityType = 'email';
             }
         }
 
         if (! $user) {
-            $user = \App\Models\Owner::query()
-                ->where('national_id', $data['login'])
+            $ownerUserIds = \App\Models\Owner::query()
+                ->where('national_id', $login)
                 ->whereNotNull('user_id')
-                ->with('user')
-                ->first()?->user;
+                ->pluck('user_id')
+                ->unique()
+                ->values();
+
+            if ($ownerUserIds->isNotEmpty()) {
+                $user = $this->matchingUserForIds($ownerUserIds, $password);
+                if ($user) {
+                    $identityType = 'national_id';
+                }
+            }
         }
 
-        if (! $user || ! Hash::check($data['password'], $user->password)) {
+        if (! $user) {
+            $phoneUserIds = User::query()
+                ->where('phone', $login)
+                ->pluck('id');
+
+            $ownerPhoneUserIds = \App\Models\Owner::query()
+                ->where('phone', $login)
+                ->whereNotNull('user_id')
+                ->pluck('user_id');
+
+            $candidateIds = $phoneUserIds
+                ->concat($ownerPhoneUserIds)
+                ->unique()
+                ->values();
+
+            if ($candidateIds->isNotEmpty()) {
+                $user = $this->matchingUserForIds($candidateIds, $password);
+                if ($user) {
+                    $identityType = 'phone';
+                }
+            }
+        }
+
+        if (! $user || ! Hash::check($password, $user->password)) {
             throw ValidationException::withMessages([
                 'login' => ['بيانات الدخول غير صحيحة.'],
             ]);
@@ -58,9 +86,11 @@ class AuthController extends BaseApiController
 
         $this->updateLegacyUsername($user);
 
+        $tokenName = $this->mobileTokenName($identityType ?: 'user', $login);
+
         return [
-            'token' => $user->createToken('bm-mobile')->plainTextToken,
-            'user' => $this->userPayload($user),
+            'token' => $user->createToken($tokenName)->plainTextToken,
+            'user' => $this->userPayload($user, $identityType, $login),
         ];
     }
 
@@ -68,9 +98,14 @@ class AuthController extends BaseApiController
     {
         $user = $request->user();
         $this->updateLegacyUsername($user);
+        $identity = $this->requestLoginIdentity($request);
 
         return [
-            'user' => $this->userPayload($user),
+            'user' => $this->userPayload(
+                $user,
+                $identity['type'] ?? null,
+                $identity['value'] ?? null
+            ),
         ];
     }
 
@@ -204,21 +239,18 @@ class AuthController extends BaseApiController
         $user->refresh();
     }
 
-    private function userPayload(User $user): array
+    private function userPayload(User $user, ?string $identityType = null, ?string $identityValue = null): array
     {
         $managedBuildings = $user->isAdmin()
             ? \App\Models\Building::query()->orderBy('name')->get()
             : $user->managedBuildings()->orderBy('name')->get();
 
-        $nationalIds = $this->ownerIdentityNationalIds($user);
-        $ownerProfiles = \App\Models\Owner::query()
-            ->with('building')
-            ->when(
-                $nationalIds->isNotEmpty(),
-                fn ($query) => $query->whereIn('national_id', $nationalIds->all()),
-                fn ($query) => $query->where('user_id', $user->id)
-            )
-            ->get();
+        $ownerProfiles = $this->ownerProfilesForIdentity(
+            $user,
+            $identityType,
+            $identityValue,
+            ['building']
+        );
 
         $ownedBuildings = $ownerProfiles
             ->pluck('building')
@@ -254,5 +286,29 @@ class AuthController extends BaseApiController
                 'is_owner' => in_array((int) $building->id, $ownedIds, true),
             ])->values(),
         ];
+    }
+
+    private function matchingUserForIds($ids, string $password): ?User
+    {
+        return User::query()
+            ->whereIn('id', collect($ids)->filter()->unique()->values()->all())
+            ->withCount('managedBuildings')
+            ->get()
+            ->filter(fn (User $candidate) => Hash::check($password, $candidate->password))
+            ->sortByDesc(function (User $candidate) {
+                return
+                    ($candidate->status === 'active' ? 100000 : 0) +
+                    ($candidate->isAdmin() ? 10000 : 0) +
+                    ((int) ($candidate->managed_buildings_count ?? 0) * 100) +
+                    (int) $candidate->id;
+            })
+            ->first();
+    }
+
+    private function mobileTokenName(string $type, string $value): string
+    {
+        $encoded = rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+
+        return 'bm-mobile|' . $type . '|' . $encoded;
     }
 }
