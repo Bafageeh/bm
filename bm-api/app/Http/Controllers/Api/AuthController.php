@@ -19,8 +19,22 @@ class AuthController extends BaseApiController
         $user = User::query()
             ->where('email', $data['login'])
             ->orWhere('username', $data['login'])
-            ->orWhere('phone', $data['login'])
             ->first();
+
+        if (! $user) {
+            $phoneUsers = User::query()
+                ->where('phone', $data['login'])
+                ->limit(2)
+                ->get();
+
+            if ($phoneUsers->count() === 1) {
+                $user = $phoneUsers->first();
+            } elseif ($phoneUsers->count() > 1) {
+                throw ValidationException::withMessages([
+                    'login' => ['رقم الجوال مرتبط بأكثر من حساب. استخدم رقم الهوية أو اسم المستخدم للدخول.'],
+                ]);
+            }
+        }
 
         if (! $user) {
             $user = \App\Models\Owner::query()
@@ -81,10 +95,6 @@ class AuthController extends BaseApiController
 
         if ($username !== (string) $user->username && User::where('username', $username)->whereKeyNot($user->id)->exists()) {
             $conflicts['username'] = ['اسم المستخدم مستخدم لحساب آخر.'];
-        }
-
-        if ($phone !== $user->phone && $phone && User::where('phone', $phone)->whereKeyNot($user->id)->exists()) {
-            $conflicts['phone'] = ['رقم الجوال مستخدم لحساب آخر.'];
         }
 
         if ($email !== $user->email && $email && User::where('email', $email)->whereKeyNot($user->id)->exists()) {
