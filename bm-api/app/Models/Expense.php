@@ -43,4 +43,9 @@ class Expense extends Model
     {
         return $this->hasMany(ExpenseAttachment::class)->oldest('id');
     }
+
+    public function dues(): HasMany
+    {
+        return $this->hasMany(ExpenseOwnerDue::class);
+    }
 }
