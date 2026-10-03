@@ -90,20 +90,35 @@ class DashboardController extends BaseApiController
                     'stats' => $this->buildingStats($building),
                     'summary' => $summary,
                     'building_owners' => $buildingOwners,
-                    'expenses' => $building->expenses()->latest('expense_date')->get()->map(function ($expense) use ($building, $owner) {
-                        $apartmentCount = max(1, $building->apartments()->count());
-                        $ownerApartments = $owner->apartments()->count();
-                        $ownerShare = ((float) $expense->amount / $apartmentCount) * $ownerApartments;
+                    'expenses' => $owner->expenseDues()
+                        ->where('building_id', $building->id)
+                        ->with(['expense.attachments'])
+                        ->latest('id')
+                        ->get()
+                        ->map(function ($due) {
+                            $expense = $due->expense;
 
-                        return [
-                            'id' => $expense->id,
-                            'category' => $expense->category,
-                            'amount' => (float) $expense->amount,
-                            'expense_date' => $expense->expense_date,
-                            'description' => $expense->description,
-                            'owner_share' => round($ownerShare, 2),
-                        ];
-                    })->values(),
+                            return [
+                                'id' => $expense?->id,
+                                'due_id' => $due->id,
+                                'category' => $expense?->category,
+                                'amount' => (float) ($expense?->amount ?? 0),
+                                'expense_date' => $expense?->expense_date,
+                                'description' => $expense?->description,
+                                'attachments' => $expense?->attachments ?? [],
+                                'owner_share' => round((float) $due->amount, 2),
+                                'due_status' => $due->status,
+                                'payment_method' => $due->payment_method,
+                                'payment_date' => $due->payment_date,
+                                'owner_notes' => $due->owner_notes,
+                                'receipt_url' => $due->receipt_url,
+                                'receipt_original_name' => $due->receipt_original_name,
+                                'manager_notes' => $due->manager_notes,
+                                'submitted_at' => $due->submitted_at,
+                                'verified_at' => $due->verified_at,
+                            ];
+                        })
+                        ->values(),
                 ];
             })->values(),
         ];
