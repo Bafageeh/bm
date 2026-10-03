@@ -642,6 +642,17 @@ function categoryNames(categories) {
   const names = (categories || []).map((item) => item?.name || item).filter(Boolean);
   return names.length ? names : DEFAULT_EXPENSE_CATEGORIES;
 }
+function expenseDueStatusLabel(status) {
+  if (status === 'submitted') return 'بانتظار التحقق';
+  if (status === 'confirmed') return 'تم السداد';
+  if (status === 'rejected') return 'لم يصل المبلغ';
+  return 'غير مسدد';
+}
+function expenseDueBadgeStyle(status) {
+  if (status === 'confirmed') return styles.badgeSurplus;
+  if (status === 'submitted') return styles.badgeBalanced;
+  return styles.badgeDue;
+}
 function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], reload }) {
   const options = categoryNames(categories);
   const [expenseFormVisible, setExpenseFormVisible] = useState(false);
@@ -1064,6 +1075,74 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
         <Text style={styles.amountText}>{money(group.total)}</Text>
       </Pressable>)}
     </ScrollView>
+
+    <Modal visible={managerDuesVisible} transparent animationType="fade" onRequestClose={() => setManagerDuesVisible(false)}>
+      <View style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setManagerDuesVisible(false)} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={() => setManagerDuesVisible(false)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>سداد الملاك</Text>
+              <Text style={styles.ownerMeta}>بانتظار التحقق: {submittedDuesCount} • المؤكد: {Number(managerDueCounts?.confirmed || 0)}</Text>
+            </View>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            {managerDues.length === 0 ? <EmptyState icon="wallet-outline" title="لا توجد مبالغ موزعة" text="عند إضافة فاتورة وتوزيعها على الملاك ستظهر هنا حالات السداد." /> : null}
+            {managerDues.map((due) => <Pressable
+              key={due.id}
+              disabled={due.status === 'unpaid'}
+              onPress={() => openDueReview(due)}
+              style={({ pressed }) => [styles.dueCard, pressed && styles.pressed]}
+            >
+              <View style={styles.dueCardTop}>
+                <View style={styles.flex1}>
+                  <Text style={styles.cardTitle}>{due?.owner?.name || 'مالك'}</Text>
+                  <Text style={styles.cardSub}>{due?.expense?.category || 'مصروف'} • {displayDate(due?.expense?.expense_date)}</Text>
+                </View>
+                <View style={[styles.badge, expenseDueBadgeStyle(due.status)]}><Text style={styles.badgeText}>{expenseDueStatusLabel(due.status)}</Text></View>
+              </View>
+              <Text style={styles.dueAmountText}>{money(due.amount)}</Text>
+              {due.status === 'submitted' ? <Text style={styles.dueActionHint}>اضغط للتحقق من التحويل والإيصال</Text> : null}
+              {due.status === 'rejected' && due.manager_notes ? <Text style={styles.dueManagerNote}>رد المدير: {due.manager_notes}</Text> : null}
+            </Pressable>)}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+
+    <Modal visible={!!reviewDue} transparent animationType="fade" onRequestClose={() => setReviewDue(null)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setReviewDue(null)} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={() => setReviewDue(null)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>التحقق من السداد</Text>
+              <Text style={styles.ownerMeta}>{reviewDue?.owner?.name || ''} • {money(reviewDue?.amount || 0)}</Text>
+            </View>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            <View style={styles.paymentDetailsCard}>
+              <Text style={styles.paymentDetailsLine}>الفاتورة: {reviewDue?.expense?.category || '-'}</Text>
+              <Text style={styles.paymentDetailsLine}>طريقة الدفع: {reviewDue?.payment_method || '-'}</Text>
+              <Text style={styles.paymentDetailsLine}>تاريخ الدفع: {displayDate(reviewDue?.payment_date)}</Text>
+              {reviewDue?.owner_notes ? <Text style={styles.paymentDetailsLine}>ملاحظة المالك: {reviewDue.owner_notes}</Text> : null}
+            </View>
+            {reviewDue?.receipt_url ? <Pressable onPress={() => Linking.openURL(expenseAttachmentUrl(reviewDue.receipt_url))} style={({ pressed }) => [styles.receiptOpenButton, pressed && styles.pressed]}>
+              <Ionicons name="attach-outline" size={20} color="#7c3aed" />
+              <Text style={styles.receiptOpenButtonText}>فتح إيصال السداد</Text>
+            </Pressable> : <Text style={styles.settingsHint}>لم يرفق المالك إيصالًا.</Text>}
+            <Field label="ملاحظة المدير" value={managerReviewNotes} onChangeText={setManagerReviewNotes} placeholder="مثال: تم مطابقة الحوالة مع كشف الحساب" multiline />
+            <PrimaryButton title="تأكيد وصول المبلغ" icon="checkmark-circle-outline" onPress={() => verifyDue('confirmed')} loading={verifyingDue} />
+            <Pressable disabled={verifyingDue} onPress={() => verifyDue('rejected')} style={({ pressed }) => [styles.rejectPaymentButton, pressed && styles.pressed]}>
+              <Ionicons name="close-outline" size={20} color="#dc2626" />
+              <Text style={styles.rejectPaymentButtonText}>المبلغ لم يصل</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
 
     <ExpenseTypeFormModal
       visible={typeFormVisible}
