@@ -277,11 +277,15 @@ class ExpenseController extends BaseApiController
 
     private function notifyDueOwners(Building $building, Expense $expense, Collection $dues, string $event): void
     {
+        $userIds = collect();
+
         foreach ($dues as $due) {
             $userId = $due->owner?->user_id;
             if (! $userId) {
                 continue;
             }
+
+            $userIds->push($userId);
 
             UserNotification::updateOrCreate(
                 [
@@ -305,6 +309,17 @@ class ExpenseController extends BaseApiController
                 ]
             );
         }
+
+        app(ExpenseNotificationService::class)->pushToUsers(
+            $userIds,
+            $event === 'updated' ? 'تم تحديث فاتورة مستحقة' : 'فاتورة جديدة مستحقة',
+            'لديك مبلغ مستحق في مصروفات المبنى. افتح التنبيه للاطلاع على الفاتورة وتسجيل السداد.',
+            [
+                'type' => 'expense_due',
+                'building_id' => $building->id,
+                'tab' => 'expenses',
+            ]
+        );
     }
 
     private function freshExpense(Expense $expense): Expense
