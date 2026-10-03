@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\Building;
 use App\Models\ExpenseOwnerDue;
 use App\Models\UserNotification;
+use App\Services\ExpenseNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -230,7 +231,10 @@ class ExpenseDueController extends BaseApiController
     {
         $due->loadMissing(['building.managers', 'owner', 'expense']);
 
+        $managerIds = collect();
+
         foreach ($due->building->managers as $manager) {
+            $managerIds->push($manager->id);
             UserNotification::updateOrCreate(
                 [
                     'user_id' => $manager->id,
@@ -252,6 +256,18 @@ class ExpenseDueController extends BaseApiController
                 ]
             );
         }
+
+        app(ExpenseNotificationService::class)->pushToUsers(
+            $managerIds,
+            'إثبات سداد بانتظار التحقق',
+            ($due->owner?->name ?: 'مالك').' أرسل إثبات سداد بقيمة '.number_format((float) $due->amount, 2).' ريال.',
+            [
+                'type' => 'expense_payment_submitted',
+                'building_id' => $due->building_id,
+                'due_id' => $due->id,
+                'tab' => 'expenses',
+            ]
+        );
     }
 
     private function notifyOwnerOfVerification(ExpenseOwnerDue $due): void
@@ -279,5 +295,19 @@ class ExpenseDueController extends BaseApiController
                 'action' => 'expense_due',
             ],
         ]);
+
+        app(ExpenseNotificationService::class)->pushToUsers(
+            [$userId],
+            $confirmed ? 'تم توثيق السداد' : 'لم يتم تأكيد وصول المبلغ',
+            $confirmed
+                ? 'تم تأكيد استلام مبلغ '.number_format((float) $due->amount, 2).' ريال.'
+                : 'راجع فاتورتك وأعد إرسال بيانات السداد بعد التحقق من التحويل.',
+            [
+                'type' => $confirmed ? 'expense_payment_confirmed' : 'expense_payment_rejected',
+                'building_id' => $due->building_id,
+                'due_id' => $due->id,
+                'tab' => 'expenses',
+            ]
+        );
     }
 }
