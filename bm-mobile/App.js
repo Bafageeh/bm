@@ -1352,6 +1352,35 @@ function ExpenseFormModal({ visible, onClose, title, categories, category, setCa
             : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>{(categories || DEFAULT_EXPENSE_CATEGORIES).map((item) => <Pressable key={item} onPress={() => setCategory(item)} style={[styles.chip, category === item && styles.chipActive]}><Text style={[styles.chipText, category === item && styles.chipTextActive]}>{item}</Text></Pressable>)}</ScrollView>}
           <Field label="المبلغ" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" />
           <DatePickerField label="تاريخ المصروف" value={dateValue} onChange={setDateValue} />
+
+          <Text style={styles.label}>توزيع الفاتورة على الملاك</Text>
+          <View style={styles.expenseScopeRow}>
+            <Pressable onPress={() => { setScope?.('all'); setSelectedOwnerIds?.([]); }} style={[styles.expenseScopeChoice, scope === 'all' && styles.expenseScopeChoiceActive]}>
+              <Ionicons name={scope === 'all' ? "checkmark-circle-outline" : "people-outline"} size={18} color={scope === 'all' ? "#0f766e" : "#64748b"} />
+              <Text style={[styles.expenseScopeChoiceText, scope === 'all' && styles.expenseScopeChoiceTextActive]}>كل الملاك</Text>
+            </Pressable>
+            <Pressable onPress={() => setScope?.('selected')} style={[styles.expenseScopeChoice, scope === 'selected' && styles.expenseScopeChoiceActive]}>
+              <Ionicons name={scope === 'selected' ? "checkmark-circle-outline" : "person-outline"} size={18} color={scope === 'selected' ? "#0f766e" : "#64748b"} />
+              <Text style={[styles.expenseScopeChoiceText, scope === 'selected' && styles.expenseScopeChoiceTextActive]}>ملاك محددون</Text>
+            </Pressable>
+          </View>
+          {scope === 'all' ? <Text style={styles.expenseAllocationHint}>سيتم احتساب نصيب كل مالك حسب عدد الشقق المملوكة له.</Text> : null}
+          {scope === 'selected' ? <View style={styles.expenseOwnerSelectionBox}>
+            <Text style={styles.expenseAllocationHint}>اختر الملاك المشاركين في هذه الفاتورة، وسيقسم المبلغ بينهم بالتساوي.</Text>
+            {(owners || []).map((owner) => {
+              const ownerId = Number(owner.id);
+              const selected = selectedOwnerIds.includes(ownerId);
+              return <Pressable key={ownerId} onPress={() => setSelectedOwnerIds?.((current) => selected ? current.filter((id) => id !== ownerId) : [...current, ownerId])} style={[styles.expenseOwnerChoice, selected && styles.expenseOwnerChoiceActive]}>
+                <Ionicons name={selected ? "checkmark-circle-outline" : "person-outline"} size={19} color={selected ? "#0f766e" : "#64748b"} />
+                <View style={styles.flex1}>
+                  <Text style={styles.expenseOwnerChoiceName}>{owner.name}</Text>
+                  <Text style={styles.expenseOwnerChoiceMeta}>الشقق: {(owner.apartments || []).join('، ') || '-'}</Text>
+                </View>
+                {selected && Number(amount) > 0 && selectedOwnerIds.length > 0 ? <Text style={styles.expenseOwnerSharePreview}>{money(Number(amount) / selectedOwnerIds.length)}</Text> : null}
+              </Pressable>;
+            })}
+          </View> : null}
+
           <Field label="ملاحظة" value={description} onChangeText={setDescription} placeholder="وصف المصروف" multiline />
           <Text style={styles.label}>المرفقات</Text>
           <Pressable accessibilityLabel="إضافة مرفق للمصروف" onPress={onPickAttachments} style={({ pressed }) => [styles.expenseAttachmentPicker, pressed && styles.pressed]}>
