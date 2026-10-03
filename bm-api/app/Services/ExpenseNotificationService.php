@@ -36,6 +36,61 @@ class ExpenseNotificationService
         ]);
     }
 
+    public function pushToUsers(iterable $userIds, string $title, string $body, array $data = []): void
+    {
+        $ids = collect($userIds)->map(fn ($id) => (int) $id)->filter()->unique()->values();
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        $tokens = PushToken::query()
+            ->whereIn('user_id', $ids)
+            ->pluck('token')
+            ->unique()
+            ->values();
+
+        if ($tokens->isEmpty()) {
+            return;
+        }
+
+        try {
+            foreach ($tokens->chunk(100) as $tokenChunk) {
+                $messages = $tokenChunk->map(fn (string $token) => [
+                    'to' => $token,
+                    'sound' => 'default',
+                    'title' => $title,
+                    'body' => $body,
+                    'priority' => 'high',
+                    'channelId' => 'bm-main-alerts',
+                    'data' => $data,
+                ])->values()->all();
+
+                $response = Http::timeout(20)
+                    ->acceptJson()
+                    ->asJson()
+                    ->post(self::EXPO_PUSH_URL, $messages);
+
+                if (! $response->successful()) {
+                    throw new \RuntimeException('Expo push HTTP '.$response->status().': '.$response->body());
+                }
+
+                $results = collect($response->json('data') ?? []);
+                foreach ($results as $index => $result) {
+                    $token = $tokenChunk->values()->get($index);
+                    $error = $result['details']['error'] ?? null;
+                    if ($error === 'DeviceNotRegistered' && $token) {
+                        PushToken::where('token', $token)->delete();
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('BM immediate push notification failed.', [
+                'user_ids' => $ids->all(),
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     public function sendDue(): array
     {
         $stats = ['events' => 0, 'sent' => 0, 'failed' => 0, 'no_recipients' => 0];
