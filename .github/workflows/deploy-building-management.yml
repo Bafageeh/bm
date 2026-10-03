@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "bm-api/app/Http/Controllers/Api/BuildingController.php"
+      - "bm-api/app/Http/Controllers/Api/AuthController.php"
+      - "bm-api/app/Http/Controllers/Api/BaseApiController.php"
       - "bm-api/routes/api.php"
       - ".github/workflows/deploy-building-management.yml"
   workflow_dispatch:
@@ -33,10 +35,18 @@ jobs:
             git show origin/main:bm-api/app/Http/Controllers/Api/BuildingController.php > /tmp/BuildingController.php
             install -o pmsa -g pmsa -m 0644 /tmp/BuildingController.php "$API/app/Http/Controllers/Api/BuildingController.php"
 
+            git show origin/main:bm-api/app/Http/Controllers/Api/AuthController.php > /tmp/AuthController.php
+            install -o pmsa -g pmsa -m 0644 /tmp/AuthController.php "$API/app/Http/Controllers/Api/AuthController.php"
+
+            git show origin/main:bm-api/app/Http/Controllers/Api/BaseApiController.php > /tmp/BaseApiController.php
+            install -o pmsa -g pmsa -m 0644 /tmp/BaseApiController.php "$API/app/Http/Controllers/Api/BaseApiController.php"
+
             git show origin/main:bm-api/routes/api.php > /tmp/bm-api-routes.php
             install -o pmsa -g pmsa -m 0644 /tmp/bm-api-routes.php "$API/routes/api.php"
 
             php -l "$API/app/Http/Controllers/Api/BuildingController.php"
+            php -l "$API/app/Http/Controllers/Api/AuthController.php"
+            php -l "$API/app/Http/Controllers/Api/BaseApiController.php"
             php -l "$API/routes/api.php"
 
             cd "$API"
