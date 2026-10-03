@@ -749,6 +749,8 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
     setExpenseDate(todayDate());
     setDescription('');
     setAttachments([]);
+    setScope('all');
+    setSelectedOwnerIds([]);
   };
   const closeAddExpenseForm = () => {
     resetAddExpenseForm();
@@ -919,7 +921,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
       setLoading(true);
       const created = await request(`/buildings/${buildingId}/expenses`, {
         method: 'POST',
-        body: JSON.stringify({ category, amount: Number(amount), expense_date: apiDate, description }),
+        body: JSON.stringify({ category, amount: Number(amount), expense_date: apiDate, description, scope, owner_ids: scope === 'selected' ? selectedOwnerIds : [] }),
       }, token);
       let attachmentWarning = '';
       if (attachments.length > 0) {
@@ -931,6 +933,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
       }
       closeAddExpenseForm();
       await reload();
+      await loadManagerDues(true);
       if (attachmentWarning) Alert.alert('تم حفظ المصروف', `تم حفظ المصروف، لكن تعذر رفع المرفقات: ${attachmentWarning}`);
     } catch (e) {
       Alert.alert('تعذر إضافة المصروف', e.message);
@@ -945,6 +948,8 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
     setEditAmount(String(item.amount || ''));
     setEditDate(normalizeDateForApi(item.expense_date || todayDate()));
     setEditDescription(item.description || '');
+    setEditScope(item.scope || 'all');
+    setEditSelectedOwnerIds((item.dues || item.owners || []).map((ownerOrDue) => Number(ownerOrDue?.owner_id ?? ownerOrDue?.owner?.id ?? ownerOrDue?.id)).filter(Boolean));
     setEditNewAttachments([]);
     setEditExpenseVisible(true);
   };
@@ -957,7 +962,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
       setSavingExpense(true);
       await request(`/buildings/${buildingId}/expenses/${editingExpense.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ category: editCategory, amount: Number(editAmount), expense_date: apiDate, description: editDescription }),
+        body: JSON.stringify({ category: editCategory, amount: Number(editAmount), expense_date: apiDate, description: editDescription, scope: editScope, owner_ids: editScope === 'selected' ? editSelectedOwnerIds : [] }),
       }, token);
       let attachmentWarning = '';
       if (editNewAttachments.length > 0) {
@@ -970,6 +975,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
       setEditExpenseVisible(false);
       setExpenseCategoryDetailsVisible(false);
       await reload();
+      await loadManagerDues(true);
       if (attachmentWarning) Alert.alert('تم حفظ التعديل', `تم تعديل المصروف، لكن تعذر رفع المرفقات: ${attachmentWarning}`);
     } catch (e) {
       Alert.alert('تعذر تعديل المصروف', e.message);
@@ -987,6 +993,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
           await request(`/buildings/${buildingId}/expenses/${item.id}`, { method: 'DELETE' }, token);
           setExpenseCategoryDetailsVisible(false);
           await reload();
+          await loadManagerDues(true);
         } catch (e) {
           Alert.alert('تعذر حذف المصروف', e.message);
         }
