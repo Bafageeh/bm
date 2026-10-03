@@ -1,0 +1,54 @@
+name: Deploy BM Chat
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "bm-api/app/Http/Controllers/Api/ChatController.php"
+      - "bm-api/app/Models/ChatConversation.php"
+      - "bm-api/app/Models/ChatMessage.php"
+      - "bm-api/app/Services/ChatNotificationService.php"
+      - "bm-api/database/migrations/2026_10_03_181500_create_chat_tables.php"
+      - "bm-api/routes/api.php"
+      - ".github/workflows/deploy-chat.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy chat backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BM_SSH_HOST }}
+          username: ${{ secrets.BM_SSH_USER }}
+          key: ${{ secrets.BM_SSH_PRIVATE_KEY }}
+          port: "${{ secrets.BM_SSH_PORT }}"
+          command_timeout: 5m
+          script: |
+            set -e
+            ROOT=/mnt/home-storage/home/pmsa/apps/bm
+            API="$ROOT/bm-api"
+
+            cd "$ROOT"
+            git fetch origin main
+
+            for file in \
+              app/Http/Controllers/Api/ChatController.php \
+              app/Models/ChatConversation.php \
+              app/Models/ChatMessage.php \
+              app/Services/ChatNotificationService.php \
+              database/migrations/2026_10_03_181500_create_chat_tables.php \
+              routes/api.php
+            do
+              git show "origin/main:bm-api/$file" > "/tmp/bm-chat-$(basename "$file")"
+              install -o pmsa -g pmsa -m 0644 "/tmp/bm-chat-$(basename "$file")" "$API/$file"
+              php -l "$API/$file"
+            done
+
+            cd "$API"
+            php artisan migrate --path=database/migrations/2026_10_03_181500_create_chat_tables.php --force
+            php artisan optimize:clear
+            php artisan route:list --path=chat
+            echo "BM chat backend deployed."
