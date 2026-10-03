@@ -97,12 +97,17 @@ return new class extends Migration
                         : collect();
 
                     $totalApartments = (int) $apartmentCounts->sum();
-                    $equalShare = round(((float) $expense->amount) / max(1, $owners->count()), 2);
+                    $eligibleOwners = $totalApartments > 0
+                        ? $owners->filter(fn ($owner) => (int) ($apartmentCounts[$owner->id] ?? 0) > 0)->values()
+                        : $owners->values();
 
-                    foreach ($owners as $owner) {
-                        $amount = $totalApartments > 0
-                            ? round(((float) $expense->amount / $totalApartments) * (int) ($apartmentCounts[$owner->id] ?? 0), 2)
-                            : $equalShare;
+                    $remaining = round((float) $expense->amount, 2);
+                    foreach ($eligibleOwners as $index => $owner) {
+                        $amount = $index === $eligibleOwners->count() - 1
+                            ? $remaining
+                            : ($totalApartments > 0
+                                ? round(((float) $expense->amount / $totalApartments) * (int) ($apartmentCounts[$owner->id] ?? 0), 2)
+                                : floor((((float) $expense->amount / max(1, $eligibleOwners->count())) * 100)) / 100);
 
                         if ($amount <= 0) {
                             continue;
@@ -117,6 +122,8 @@ return new class extends Migration
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
+
+                        $remaining = round($remaining - $amount, 2);
                     }
                 }
             });
