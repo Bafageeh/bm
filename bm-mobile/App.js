@@ -1046,6 +1046,14 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
           <Ionicons name="add" size={28} color="#fff" />
         </Pressable>
       </View>
+      <Pressable onPress={() => { loadManagerDues(true); setManagerDuesVisible(true); }} style={({ pressed }) => [styles.paymentReviewCard, pressed && styles.pressed]}>
+        <View style={styles.rowIcon}><Ionicons name="wallet-outline" size={22} color="#0f766e" /></View>
+        <View style={styles.flex1}>
+          <Text style={styles.cardTitle}>سداد الملاك وتوثيق التحويلات</Text>
+          <Text style={styles.cardSub}>راجع ما أرسله الملاك وأكد وصول المبلغ أو ارفضه.</Text>
+        </View>
+        {submittedDuesCount > 0 ? <View style={[styles.badge, styles.badgeDue]}><Text style={styles.badgeText}>{submittedDuesCount} بانتظارك</Text></View> : <Ionicons name="chevron-back" size={20} color="#64748b" />}
+      </Pressable>
       {groupedExpenses.length === 0 ? <EmptyState icon="receipt-outline" title="لا توجد أنواع صرف" text="اضغط زر + لإضافة نوع صرف للمبنى." /> : null}
       {groupedExpenses.map((group) => <Pressable key={group.category} accessibilityLabel={`عرض مصروفات ${group.category}`} onPress={() => { setSelectedExpenseCategory(group); setExpenseCategoryDetailsVisible(true); }} style={({ pressed }) => [styles.rowCard, pressed && styles.pressed]}>
         <View style={styles.rowIcon}><Ionicons name="folder-open-outline" size={20} color="#f97316" /></View>
