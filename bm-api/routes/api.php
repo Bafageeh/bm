@@ -43,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/buildings/{building}', [BuildingController::class, 'update']);
     Route::delete('/buildings/{building}', [BuildingController::class, 'destroy']);
     Route::put('/buildings/{building}/apartment-count', [BuildingController::class, 'updateApartmentCount']);
+    Route::post('/buildings/{building}/transfer-management', [BuildingController::class, 'transferManagement']);
 
     Route::get('/buildings/{building}/dashboard', [DashboardController::class, 'building']);
     Route::get('/owner/dashboard', [DashboardController::class, 'owner']);
