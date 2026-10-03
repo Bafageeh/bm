@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExpenseCategoryController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExpenseAttachmentController;
+use App\Http\Controllers\Api\ExpenseDueController;
 use App\Http\Controllers\Api\ManagerRegistrationController;
 use App\Http\Controllers\Api\OwnerController;
 use App\Http\Controllers\Api\PaymentController;
@@ -20,6 +21,7 @@ Route::get('/health', fn () => ['ok' => true, 'app' => 'BM API']);
 Route::get('/updates/manifest', [UpdateController::class, 'manifest']);
 Route::get('/updates/assets', [UpdateController::class, 'asset']);
 Route::get('/expense-attachments/{attachment}/{token}', [ExpenseAttachmentController::class, 'show']);
+Route::get('/expense-due-receipts/{due}/{token}', [ExpenseDueController::class, 'showReceipt']);
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/manager-registration/request-otp', [ManagerRegistrationController::class, 'requestOtp']);
@@ -60,6 +62,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/buildings/{building}/expenses', [ExpenseController::class, 'index']);
     Route::post('/buildings/{building}/expenses', [ExpenseController::class, 'store']);
+    Route::get('/buildings/{building}/expense-dues', [ExpenseDueController::class, 'managerIndex']);
+    Route::post('/buildings/{building}/expense-dues/{due}/verify', [ExpenseDueController::class, 'verify']);
+    Route::get('/owner/expense-dues', [ExpenseDueController::class, 'ownerIndex']);
+    Route::post('/owner/expense-dues/{due}/submit', [ExpenseDueController::class, 'submit']);
     Route::put('/buildings/{building}/expenses/{expense}', [ExpenseController::class, 'update']);
     Route::delete('/buildings/{building}/expenses/{expense}', [ExpenseController::class, 'destroy']);
     Route::post('/buildings/{building}/expenses/{expense}/attachments', [ExpenseAttachmentController::class, 'store']);
