@@ -1905,6 +1905,261 @@ function OwnerExpensesReadOnlyScreen({ expenses }) {
     </Modal>
   </>;
 }
+function ChatScreen({ token, buildingId, currentUserId }) {
+  const [conversations, setConversations] = useState([]);
+  const [recipients, setRecipients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newVisible, setNewVisible] = useState(false);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState([]);
+  const [groupTitle, setGroupTitle] = useState('');
+  const [firstMessage, setFirstMessage] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [conversationVisible, setConversationVisible] = useState(false);
+  const [activeConversation, setActiveConversation] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [messageText, setMessageText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const loadConversations = async (silent = false) => {
+    if (!buildingId) return;
+    try {
+      if (!silent) setLoading(true);
+      const data = await request(`/buildings/${buildingId}/chat/conversations`, {}, token);
+      setConversations(data?.data || []);
+    } catch (error) {
+      if (!silent) Alert.alert('تعذر تحميل المراسلات', error.message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  const loadRecipients = async () => {
+    try {
+      const data = await request(`/buildings/${buildingId}/chat/recipients`, {}, token);
+      setRecipients(data?.data || []);
+    } catch (error) {
+      Alert.alert('تعذر تحميل الملاك', error.message);
+    }
+  };
+
+  useEffect(() => {
+    loadConversations();
+    loadRecipients();
+  }, [buildingId, token]);
+
+  const openNew = () => {
+    setSelectedRecipientIds([]);
+    setGroupTitle('');
+    setFirstMessage('');
+    setNewVisible(true);
+  };
+
+  const toggleRecipient = (userId) => {
+    setSelectedRecipientIds((current) =>
+      current.includes(userId)
+        ? current.filter((id) => id !== userId)
+        : [...current, userId]
+    );
+  };
+
+  const createConversation = async () => {
+    if (selectedRecipientIds.length === 0) {
+      return Alert.alert('تنبيه', 'اختر مالكًا واحدًا على الأقل.');
+    }
+
+    try {
+      setCreating(true);
+      const payload = {
+        recipient_user_ids: selectedRecipientIds,
+        title: String(groupTitle || '').trim() || null,
+        message: String(firstMessage || '').trim() || null,
+      };
+      const data = await request(
+        `/buildings/${buildingId}/chat/conversations`,
+        { method: 'POST', body: JSON.stringify(payload) },
+        token
+      );
+      setNewVisible(false);
+      await loadConversations(true);
+      if (data?.data) await openConversation(data.data);
+    } catch (error) {
+      Alert.alert('تعذر إنشاء المحادثة', error.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const fetchConversation = async (conversation, silent = false) => {
+    try {
+      if (!silent) setLoadingMessages(true);
+      const data = await request(
+        `/buildings/${buildingId}/chat/conversations/${conversation.id}`,
+        {},
+        token
+      );
+      setActiveConversation(data?.data?.conversation || conversation);
+      setMessages(data?.data?.messages || []);
+      await loadConversations(true);
+    } catch (error) {
+      if (!silent) Alert.alert('تعذر فتح المحادثة', error.message);
+    } finally {
+      if (!silent) setLoadingMessages(false);
+    }
+  };
+
+  const openConversation = async (conversation) => {
+    setActiveConversation(conversation);
+    setMessages([]);
+    setMessageText('');
+    setConversationVisible(true);
+    await fetchConversation(conversation);
+  };
+
+  useEffect(() => {
+    if (!conversationVisible || !activeConversation?.id) return;
+    const timer = setInterval(() => {
+      fetchConversation(activeConversation, true);
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [conversationVisible, activeConversation?.id, buildingId, token]);
+
+  const sendMessage = async () => {
+    const body = String(messageText || '').trim();
+    if (!body || !activeConversation?.id) return;
+
+    try {
+      setSending(true);
+      const data = await request(
+        `/buildings/${buildingId}/chat/conversations/${activeConversation.id}/messages`,
+        { method: 'POST', body: JSON.stringify({ body }) },
+        token
+      );
+      setMessageText('');
+      if (data?.data) setMessages((current) => [...current, data.data]);
+      await loadConversations(true);
+    } catch (error) {
+      Alert.alert('تعذر إرسال الرسالة', error.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const formatMessageTime = (value) => {
+    if (!value) return '';
+    try {
+      return new Date(value).toLocaleString('ar-SA', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } catch (_) {
+      return '';
+    }
+  };
+
+  return <>
+    <View style={styles.chatScreen}>
+      <View style={styles.chatTopRow}>
+        <View>
+          <Text style={styles.chatHeading}>المراسلات</Text>
+          <Text style={styles.chatSubheading}>مراسلات خاصة أو جماعية بين ملاك المبنى</Text>
+        </View>
+        <Pressable onPress={openNew} style={({ pressed }) => [styles.chatNewButton, pressed && styles.pressed]}>
+          <Ionicons name="add" size={22} color="#fff" />
+          <Text style={styles.chatNewButtonText}>جديدة</Text>
+        </Pressable>
+      </View>
+
+      {loading ? <LoadingScreen /> : <ScrollView contentContainerStyle={styles.chatListContent}>
+        {conversations.length === 0 ? <EmptyState icon="chatbubble-outline" title="لا توجد مراسلات" text="ابدأ محادثة مع مالك واحد أو أكثر من ملاك المبنى." /> : null}
+        {conversations.map((item) => <Pressable key={item.id} onPress={() => openConversation(item)} style={({ pressed }) => [styles.chatConversationCard, pressed && styles.pressed]}>
+          <View style={styles.chatAvatar}><Ionicons name="chatbubble-outline" size={21} color="#0f766e" /></View>
+          <View style={styles.flex1}>
+            <View style={styles.chatConversationTitleRow}>
+              <Text numberOfLines={1} style={styles.chatConversationTitle}>{item.title || 'محادثة'}</Text>
+              {Number(item.unread_count || 0) > 0 ? <View style={styles.chatUnreadBadge}><Text style={styles.chatUnreadText}>{item.unread_count}</Text></View> : null}
+            </View>
+            <Text numberOfLines={1} style={styles.chatLastMessage}>{item.last_message?.body || 'لا توجد رسائل بعد'}</Text>
+            <Text style={styles.chatTime}>{formatMessageTime(item.last_message?.created_at || item.updated_at)}</Text>
+          </View>
+          <Ionicons name="chevron-back" size={20} color="#94a3b8" />
+        </Pressable>)}
+      </ScrollView>}
+    </View>
+
+    <Modal visible={newVisible} transparent animationType="fade" onRequestClose={() => setNewVisible(false)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setNewVisible(false)} />
+        <View style={styles.floatingFormCard}>
+          <View style={styles.floatingFormHeader}>
+            <Pressable onPress={() => setNewVisible(false)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+            <View style={styles.flex1}>
+              <Text style={styles.floatingFormTitle}>مراسلة جديدة</Text>
+              <Text style={styles.ownerMeta}>يمكن اختيار مالك واحد أو عدة ملاك</Text>
+            </View>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
+            <Text style={styles.label}>المستلمون</Text>
+            {recipients.length === 0 ? <EmptyState icon="people-outline" title="لا يوجد مستلمون" text="لا يوجد ملاك آخرون بحسابات فعالة في هذا المبنى." /> : recipients.map((owner) => {
+              const selected = selectedRecipientIds.includes(owner.user_id);
+              return <Pressable key={owner.user_id} onPress={() => toggleRecipient(owner.user_id)} style={({ pressed }) => [styles.chatRecipientRow, selected && styles.chatRecipientRowSelected, pressed && styles.pressed]}>
+                <View style={[styles.chatRecipientCheck, selected && styles.chatRecipientCheckSelected]}>{selected ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}</View>
+                <View style={styles.flex1}>
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text style={styles.cardTitle}>{owner.name}</Text>
+                    {owner.is_manager ? <View style={styles.managerBadge}><Text style={styles.managerBadgeText}>مدير المبنى</Text></View> : null}
+                  </View>
+                  <Text style={styles.cardSub}>الشقق: {(owner.apartments || []).join('، ') || '-'}</Text>
+                </View>
+              </Pressable>;
+            })}
+            {selectedRecipientIds.length > 1 ? <Field label="اسم المجموعة - اختياري" value={groupTitle} onChangeText={setGroupTitle} placeholder="مثال: لجنة الصيانة" /> : null}
+            <View style={styles.field}>
+              <Text style={styles.label}>الرسالة الأولى - اختياري</Text>
+              <TextInput value={firstMessage} onChangeText={setFirstMessage} placeholder="اكتب رسالة..." multiline style={[styles.input, styles.chatMultilineInput]} textAlign="right" />
+            </View>
+            <PrimaryButton title="إنشاء المحادثة" icon="chatbubble-outline" onPress={createConversation} loading={creating} />
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+
+    <Modal visible={conversationVisible} animationType="slide" onRequestClose={() => setConversationVisible(false)}>
+      <SafeAreaView style={styles.chatConversationScreen}>
+        <View style={styles.chatConversationHeader}>
+          <Pressable onPress={() => setConversationVisible(false)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
+          <View style={styles.flex1}>
+            <Text style={styles.chatConversationHeaderTitle}>{activeConversation?.title || 'المحادثة'}</Text>
+            <Text numberOfLines={1} style={styles.chatConversationHeaderSub}>{(activeConversation?.participants || []).map((p) => p.name).join('، ')}</Text>
+          </View>
+        </View>
+
+        {loadingMessages ? <LoadingScreen /> : <ScrollView contentContainerStyle={styles.chatMessagesContent}>
+          {messages.length === 0 ? <EmptyState icon="chatbubble-outline" title="لا توجد رسائل" text="ابدأ بإرسال أول رسالة." /> : null}
+          {messages.map((message) => <View key={message.id} style={[styles.chatMessageBubble, message.is_mine ? styles.chatMessageMine : styles.chatMessageOther]}>
+            {!message.is_mine ? <Text style={styles.chatMessageSender}>{message.sender_name}</Text> : null}
+            <Text style={[styles.chatMessageText, message.is_mine && styles.chatMessageTextMine]}>{message.body}</Text>
+            <Text style={[styles.chatMessageTime, message.is_mine && styles.chatMessageTimeMine]}>{formatMessageTime(message.created_at)}</Text>
+          </View>)}
+        </ScrollView>}
+
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.chatComposer}>
+            <TextInput
+              value={messageText}
+              onChangeText={setMessageText}
+              placeholder="اكتب رسالة..."
+              multiline
+              style={styles.chatComposerInput}
+              textAlign="right"
+            />
+            <Pressable disabled={sending || !String(messageText || '').trim()} onPress={sendMessage} style={({ pressed }) => [styles.chatSendButton, (!String(messageText || '').trim() || sending) && styles.chatSendButtonDisabled, pressed && styles.pressed]}>
+              {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="chatbubble-outline" size={20} color="#fff" />}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Modal>
+  </>;
+}
+
 function OwnerSettingsScreen({ setTab, onLogout }) {
   const confirmLogout = () => Alert.alert('تسجيل الخروج', 'هل تريد تسجيل الخروج من الحساب؟', [{ text: 'إلغاء', style: 'cancel' }, { text: 'خروج', style: 'destructive', onPress: onLogout }]);
   return <ScrollView contentContainerStyle={styles.screenContent}>
@@ -1938,12 +2193,14 @@ function OwnerOnlyScreen({ token, user, selectedBuildingId, onLogout, onUserUpda
     {tab === 'statistics' && <OwnerStatisticsScreen profile={profile} />}
     {tab === 'owners' && <OwnerOwnersReadOnlyScreen owners={profile.building_owners || []} />}
     {tab === 'expenses' && <OwnerExpensesReadOnlyScreen expenses={profile.expenses || []} />}
+    {tab === 'chat' && <ChatScreen token={token} buildingId={selectedBuildingId} currentUserId={user?.id} />}
     {tab === 'settings' && <OwnerSettingsScreen setTab={setTab} onLogout={onLogout} />}
     {tab === 'account' && <UserSettingsScreen token={token} user={user} setTab={setTab} onUserUpdated={onUserUpdated} backTab="settings" title="معلومات الحساب" />}
     {tab === 'password' && <PasswordSettingsScreen token={token} setTab={setTab} backTab="settings" />}
     <View style={styles.tabs}>
       <TabButton active={tab === 'statistics'} icon="grid-outline" title="إحصائيات" onPress={() => setTab('statistics')} />
       <TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} />
+      <TabButton active={tab === 'chat'} icon="chatbubble-outline" title="المراسلات" onPress={() => setTab('chat')} />
       <TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} />
       <TabButton active={settingsActive} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} />
     </View>
@@ -2093,7 +2350,7 @@ function ManagerStartShell({ token, user, tab, setTab, onSelectBuilding, onBuild
   </SafeAreaView>;
 }
 function LoadingScreen() { return <View style={styles.loading}><ActivityIndicator color="#0f766e" size="large" /><Text style={styles.loadingText}>جاري التحميل...</Text></View>; }
-function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout, onUserUpdated, onManageBuildings }) { const canManageSelected = canManageBuildingForUser(user, selectedBuilding); const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async (options = {}) => { if (!selectedBuilding) return; const silent = options?.silent === true; if (!silent) setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { if (!silent) setLoading(false); } }; useEffect(() => { if (canManageSelected) reload(); }, [selectedBuilding?.id, canManageSelected]); if (selectedBuilding?.is_owner && !canManageSelected) return <SafeAreaView style={styles.container}><Header title={selectedBuilding?.name || 'حسابي'} subtitle={user.name} onBack={user?.buildings?.length > 1 ? () => setSelectedBuilding(null) : undefined} token={token} /><OwnerOnlyScreen token={token} user={user} selectedBuildingId={selectedBuilding?.id} onLogout={onLogout} onUserUpdated={onUserUpdated} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={[styles.container, canManageSelected && styles.managerContainer]}><Header title={tab === 'owners' ? 'إدارة الملاك' : selectedBuilding?.name || 'المبنى'} subtitle={tab === 'settings' ? 'الإعدادات' : tab === 'passwordSettings' ? 'تغيير الرقم السري' : tab === 'adminUsers' ? 'المستخدمون والصلاحيات' : 'إدارة اتحاد الملاك'} onBack={() => (tab === 'userSettings' || tab === 'passwordSettings' || tab === 'buildingSettings' || tab === 'expenseCategories' || tab === 'adminUsers') ? setTab('settings') : setSelectedBuilding(null)} token={token} managerMode={canManageSelected} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} expenses={expenses} payments={payments} reload={reload} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'adminUsers' && user?.role === 'admin' && <AdminUsersScreen token={token} setTab={setTab} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} onManageBuildings={onManageBuildings || (() => setSelectedBuilding(null))} onLogout={onLogout} />}{tab === 'userSettings' && <UserSettingsScreen token={token} user={user} setTab={setTab} onUserUpdated={onUserUpdated} />}{tab === 'passwordSettings' && <PasswordSettingsScreen token={token} setTab={setTab} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'settings' || tab === 'userSettings' || tab === 'passwordSettings' || tab === 'buildingSettings' || tab === 'expenseCategories' || tab === 'adminUsers'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
+function AppShell({ token, user, selectedBuilding, setSelectedBuilding, onLogout, onUserUpdated, onManageBuildings }) { const canManageSelected = canManageBuildingForUser(user, selectedBuilding); const [tab, setTab] = useState('dashboard'); const [initialPaymentOwnerId, setInitialPaymentOwnerId] = useState(null); const [dashboard, setDashboard] = useState(null); const [expenses, setExpenses] = useState([]); const [payments, setPayments] = useState([]); const [expenseCategories, setExpenseCategories] = useState([]); const [loading, setLoading] = useState(true); const reload = async (options = {}) => { if (!selectedBuilding) return; const silent = options?.silent === true; if (!silent) setLoading(true); try { const [dash, expenseData, paymentData, categoryData] = await Promise.all([request(`/buildings/${selectedBuilding.id}/dashboard`, {}, token), request(`/buildings/${selectedBuilding.id}/expenses`, {}, token), request(`/buildings/${selectedBuilding.id}/payments`, {}, token), request(`/buildings/${selectedBuilding.id}/expense-categories`, {}, token)]); setDashboard(dash); setExpenses(expenseData.data || []); setPayments(paymentData.data || []); setExpenseCategories(categoryData.data || []); } catch (e) { Alert.alert('تعذر تحميل البيانات', e.message); } finally { if (!silent) setLoading(false); } }; useEffect(() => { if (canManageSelected) reload(); }, [selectedBuilding?.id, canManageSelected]); if (selectedBuilding?.is_owner && !canManageSelected) return <SafeAreaView style={styles.container}><Header title={selectedBuilding?.name || 'حسابي'} subtitle={user.name} onBack={user?.buildings?.length > 1 ? () => setSelectedBuilding(null) : undefined} token={token} /><OwnerOnlyScreen token={token} user={user} selectedBuildingId={selectedBuilding?.id} onLogout={onLogout} onUserUpdated={onUserUpdated} /></SafeAreaView>; const owners = sortOwnersByApartment(dashboard?.owners || []); return <SafeAreaView style={[styles.container, canManageSelected && styles.managerContainer]}><Header title={tab === 'owners' ? 'إدارة الملاك' : tab === 'chat' ? 'المراسلات' : selectedBuilding?.name || 'المبنى'} subtitle={tab === 'settings' ? 'الإعدادات' : tab === 'passwordSettings' ? 'تغيير الرقم السري' : tab === 'adminUsers' ? 'المستخدمون والصلاحيات' : 'إدارة اتحاد الملاك'} onBack={() => (tab === 'userSettings' || tab === 'passwordSettings' || tab === 'buildingSettings' || tab === 'expenseCategories' || tab === 'adminUsers') ? setTab('settings') : setSelectedBuilding(null)} token={token} managerMode={canManageSelected} />{loading ? <LoadingScreen /> : <>{tab === 'dashboard' && <Dashboard dashboard={dashboard} />}{tab === 'owners' && <OwnersScreen token={token} buildingId={selectedBuilding.id} apartments={dashboard?.apartments || []} expenses={expenses} payments={payments} reload={reload} />}{tab === 'chat' && <ChatScreen token={token} buildingId={selectedBuilding.id} currentUserId={user?.id} />}{tab === 'expenses' && <ExpensesScreen token={token} buildingId={selectedBuilding.id} expenses={expenses} categories={expenseCategories} reload={reload} />}{tab === 'expenseCategories' && <ExpenseCategoriesScreen token={token} buildingId={selectedBuilding.id} categories={expenseCategories} reload={reload} user={user} />}{tab === 'adminUsers' && user?.role === 'admin' && <AdminUsersScreen token={token} setTab={setTab} />}{tab === 'payments' && <PaymentsScreen token={token} buildingId={selectedBuilding.id} owners={owners} payments={payments} reload={reload} initialOwnerId={initialPaymentOwnerId} />}{tab === 'settings' && <SettingsScreen dashboard={dashboard} setTab={setTab} user={user} onManageBuildings={onManageBuildings || (() => setSelectedBuilding(null))} onLogout={onLogout} />}{tab === 'userSettings' && <UserSettingsScreen token={token} user={user} setTab={setTab} onUserUpdated={onUserUpdated} />}{tab === 'passwordSettings' && <PasswordSettingsScreen token={token} setTab={setTab} />}{tab === 'buildingSettings' && <BuildingSettingsScreen token={token} buildingId={selectedBuilding.id} dashboard={dashboard} reload={reload} setTab={setTab} />}</>}<View style={styles.tabs}><TabButton active={tab === 'dashboard'} icon="grid-outline" title="الملخص" onPress={() => setTab('dashboard')} /><TabButton active={tab === 'owners'} icon="people-outline" title="الملاك" onPress={() => setTab('owners')} /><TabButton active={tab === 'chat'} icon="chatbubble-outline" title="المراسلات" onPress={() => setTab('chat')} /><TabButton active={tab === 'expenses'} icon="receipt-outline" title="المصروفات" onPress={() => setTab('expenses')} /><TabButton active={tab === 'settings' || tab === 'userSettings' || tab === 'passwordSettings' || tab === 'buildingSettings' || tab === 'expenseCategories' || tab === 'adminUsers'} icon="settings-outline" title="الإعدادات" onPress={() => setTab('settings')} /></View></SafeAreaView>; }
 function TabButton({ active, icon, title, onPress }) { return <Pressable onPress={onPress} style={styles.tabBtn}><Ionicons name={icon} size={21} color={active ? '#0f766e' : '#94a3b8'} /><Text style={[styles.tabText, active && styles.tabTextActive]}>{title}</Text></Pressable>; }
 export default function App() {
   const [token, setToken] = useState(null);
@@ -2173,7 +2430,44 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' }, managerContainer: { backgroundColor: '#f0fdfa' }, screenWrapper: { flex: 1, backgroundColor: '#f8fafc' }, loginContainer: { flex: 1, backgroundColor: '#ecfdf5' }, loginContent: { flexGrow: 1, padding: 22, paddingBottom: 36, justifyContent: 'center' }, logoCircle: { width: 98, height: 98, borderRadius: 49, backgroundColor: '#fff', alignSelf: 'center', justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 }, appName: { fontSize: 27, fontWeight: '900', textAlign: 'center', color: '#0f172a' }, subtitle: { fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8, lineHeight: 23 }, loginCard: { backgroundColor: '#fff', borderRadius: 24, padding: 18, marginTop: 24, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
+  container: { flex: 1, backgroundColor: '#f8fafc' }, managerContainer: { backgroundColor: '#f0fdfa' },
+  chatScreen: { flex: 1, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 82 },
+  chatTopRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 },
+  chatHeading: { color: '#0f172a', fontSize: 20, fontWeight: '900', textAlign: 'right' },
+  chatSubheading: { color: '#64748b', fontSize: 11, textAlign: 'right', marginTop: 3 },
+  chatNewButton: { minHeight: 40, paddingHorizontal: 14, borderRadius: 14, backgroundColor: '#0f766e', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  chatNewButtonText: { color: '#fff', fontWeight: '900', fontSize: 12 },
+  chatListContent: { paddingBottom: 28, gap: 9 },
+  chatConversationCard: { backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#e2e8f0', padding: 12, flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  chatAvatar: { width: 43, height: 43, borderRadius: 15, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center' },
+  chatConversationTitleRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  chatConversationTitle: { flex: 1, color: '#0f172a', fontWeight: '900', fontSize: 14, textAlign: 'right' },
+  chatLastMessage: { color: '#64748b', fontSize: 11, textAlign: 'right', marginTop: 4 },
+  chatTime: { color: '#94a3b8', fontSize: 9, textAlign: 'right', marginTop: 4 },
+  chatUnreadBadge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center' },
+  chatUnreadText: { color: '#fff', fontWeight: '900', fontSize: 10 },
+  chatRecipientRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, padding: 11, marginBottom: 8, backgroundColor: '#fff' },
+  chatRecipientRowSelected: { borderColor: '#6ee7b7', backgroundColor: '#ecfdf5' },
+  chatRecipientCheck: { width: 25, height: 25, borderRadius: 9, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  chatRecipientCheckSelected: { backgroundColor: '#0f766e', borderColor: '#0f766e' },
+  chatMultilineInput: { minHeight: 90, textAlignVertical: 'top' },
+  chatConversationScreen: { flex: 1, backgroundColor: '#f8fafc' },
+  chatConversationHeader: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: '#fff', flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  chatConversationHeaderTitle: { color: '#0f172a', fontWeight: '900', fontSize: 17, textAlign: 'right' },
+  chatConversationHeaderSub: { color: '#64748b', fontSize: 10, textAlign: 'right', marginTop: 3 },
+  chatMessagesContent: { padding: 14, paddingBottom: 30, gap: 8 },
+  chatMessageBubble: { maxWidth: '84%', borderRadius: 17, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 3 },
+  chatMessageMine: { alignSelf: 'flex-start', backgroundColor: '#0f766e', borderBottomLeftRadius: 5 },
+  chatMessageOther: { alignSelf: 'flex-end', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderBottomRightRadius: 5 },
+  chatMessageSender: { color: '#0f766e', fontSize: 10, fontWeight: '900', textAlign: 'right', marginBottom: 4 },
+  chatMessageText: { color: '#0f172a', fontSize: 14, lineHeight: 22, textAlign: 'right' },
+  chatMessageTextMine: { color: '#fff' },
+  chatMessageTime: { color: '#94a3b8', fontSize: 8, textAlign: 'left', marginTop: 5 },
+  chatMessageTimeMine: { color: '#ccfbf1' },
+  chatComposer: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e2e8f0', padding: 10, flexDirection: 'row-reverse', alignItems: 'flex-end', gap: 8 },
+  chatComposerInput: { flex: 1, maxHeight: 110, minHeight: 44, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#f8fafc', color: '#0f172a', textAlignVertical: 'top' },
+  chatSendButton: { width: 46, height: 46, borderRadius: 15, backgroundColor: '#0f766e', alignItems: 'center', justifyContent: 'center' },
+  chatSendButtonDisabled: { opacity: 0.45 }, screenWrapper: { flex: 1, backgroundColor: '#f8fafc' }, loginContainer: { flex: 1, backgroundColor: '#ecfdf5' }, loginContent: { flexGrow: 1, padding: 22, paddingBottom: 36, justifyContent: 'center' }, logoCircle: { width: 98, height: 98, borderRadius: 49, backgroundColor: '#fff', alignSelf: 'center', justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 }, appName: { fontSize: 27, fontWeight: '900', textAlign: 'center', color: '#0f172a' }, subtitle: { fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 8, lineHeight: 23 }, loginCard: { backgroundColor: '#fff', borderRadius: 24, padding: 18, marginTop: 24, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
   notificationCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 18, padding: 12, marginBottom: 9, flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 }, notificationIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: '#f5f3ff', alignItems: 'center', justifyContent: 'center' }, notificationTitle: { color: '#0f172a', fontSize: 14, fontWeight: '900', textAlign: 'right' }, notificationBody: { color: '#475569', fontSize: 13, lineHeight: 21, textAlign: 'right', marginTop: 3 }, notificationDate: { color: '#94a3b8', fontSize: 10, textAlign: 'right', marginTop: 5 },
   field: { marginBottom: 12 }, requiredHint: { color: '#ef4444', fontSize: 11, fontWeight: '800', textAlign: 'right', marginTop: 4 }, label: { color: '#334155', fontSize: 13, fontWeight: '800', textAlign: 'right', marginBottom: 6 }, input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0f172a' }, dateInput: { minHeight: 54, justifyContent: 'center', flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }, dateInputText: { flex: 1, textAlign: 'right', color: '#0f172a', fontWeight: '900' }, datePlaceholder: { color: '#94a3b8' }, textarea: { minHeight: 82, textAlignVertical: 'top' }, button: { height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexDirection: 'row-reverse', gap: 8, marginTop: 8 }, button_primary: { backgroundColor: '#0f766e' }, button_light: { backgroundColor: '#ecfdf5' }, buttonText: { color: '#fff', fontWeight: '900', fontSize: 15 }, buttonTextLight: { color: '#0f766e' }, pressed: { opacity: 0.75 },
   header: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', gap: 10 }, managerHeader: { backgroundColor: '#ecfdf5', borderBottomColor: '#a7f3d0' }, headerManagerBadge: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: '#d1fae5', borderWidth: 1, borderColor: '#6ee7b7', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 }, headerManagerBadgeText: { color: '#0f766e', fontSize: 10, fontWeight: '900' }, headerActions: { flexDirection: 'row', gap: 8 }, circleBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbeafe', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 10, elevation: 3 }, circleBtnLabel: { fontSize: 9, color: '#64748b', fontWeight: '900', marginTop: 1 }, headerTitle: { fontSize: 20, fontWeight: '900', color: '#0f172a', textAlign: 'right' }, headerSubtitle: { fontSize: 12, color: '#64748b', textAlign: 'right', marginTop: 2 }, flex1: { flex: 1 },
