@@ -56,4 +56,9 @@ class Building extends Model
     {
         return $this->hasMany(ExpenseCategory::class);
     }
+
+    public function expenseDues(): HasMany
+    {
+        return $this->hasMany(ExpenseOwnerDue::class);
+    }
 }
