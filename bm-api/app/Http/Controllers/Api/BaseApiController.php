@@ -180,6 +180,9 @@ abstract class BaseApiController extends Controller
         $payments = (float) $owner->payments()->sum('amount');
         $balance = $payments - $ownerShare;
         $unpaidAmount = max(0, $ownerShare - $payments);
+        $isManager = $owner->user_id
+            ? $building->managers()->whereKey($owner->user_id)->exists()
+            : false;
 
         return [
             'id' => $owner->id,
@@ -189,6 +192,7 @@ abstract class BaseApiController extends Controller
             'email' => $owner->email,
             'notes' => $owner->notes,
             'user_id' => $owner->user_id,
+            'is_manager' => $isManager,
             'login' => $owner->national_id ?: ($owner->phone ?: ($owner->email ?: $owner->user?->username)),
             'apartment_count' => $apartmentCount,
             'apartments' => $owner->apartments()->orderByRaw('CAST(number AS UNSIGNED), number')->pluck('number'),
