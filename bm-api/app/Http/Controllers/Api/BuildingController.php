@@ -21,22 +21,7 @@ class BuildingController extends BaseApiController
             ? Building::query()->orderBy('name')->get()
             : $user->managedBuildings()->orderBy('name')->get();
 
-        $nationalIds = $user->ownerProfiles()
-            ->whereNotNull('national_id')
-            ->pluck('national_id')
-            ->map(fn ($value) => trim((string) $value))
-            ->filter()
-            ->unique()
-            ->values();
-
-        $ownerProfiles = \App\Models\Owner::query()
-            ->with('building')
-            ->when(
-                $nationalIds->isNotEmpty(),
-                fn ($query) => $query->whereIn('national_id', $nationalIds->all()),
-                fn ($query) => $query->where('user_id', $user->id)
-            )
-            ->get();
+        $ownerProfiles = $this->ownerProfilesForRequest($request, ['building']);
 
         $ownedBuildings = $ownerProfiles
             ->pluck('building')
