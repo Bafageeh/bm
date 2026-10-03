@@ -7,6 +7,7 @@ use App\Models\Building;
 use App\Models\Owner;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 abstract class BaseApiController extends Controller
@@ -176,7 +177,9 @@ abstract class BaseApiController extends Controller
     {
         $stats = $this->buildingStats($building);
         $apartmentCount = $owner->apartments()->count();
-        $ownerShare = $stats['share_per_apartment'] * $apartmentCount;
+        $ownerShare = Schema::hasTable('expense_owner_dues')
+            ? (float) $owner->expenseDues()->where('building_id', $building->id)->sum('amount')
+            : $stats['share_per_apartment'] * $apartmentCount;
         $payments = (float) $owner->payments()->sum('amount');
         $balance = $payments - $ownerShare;
         $unpaidAmount = max(0, $ownerShare - $payments);
