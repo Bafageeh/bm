@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BuildingController;
+use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExpenseCategoryController;
 use App\Http\Controllers\Api\ExpenseController;
@@ -47,6 +48,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/buildings/{building}/dashboard', [DashboardController::class, 'building']);
     Route::get('/owner/dashboard', [DashboardController::class, 'owner']);
+
+    Route::get('/buildings/{building}/chat/recipients', [ChatController::class, 'recipients']);
+    Route::get('/buildings/{building}/chat/conversations', [ChatController::class, 'index']);
+    Route::post('/buildings/{building}/chat/conversations', [ChatController::class, 'store']);
+    Route::get('/buildings/{building}/chat/conversations/{conversation}', [ChatController::class, 'show']);
+    Route::post('/buildings/{building}/chat/conversations/{conversation}/messages', [ChatController::class, 'send']);
 
     Route::get('/buildings/{building}/owners', [OwnerController::class, 'index']);
     Route::put('/buildings/{building}/apartments/{apartment}/owner', [OwnerController::class, 'updateApartment']);
