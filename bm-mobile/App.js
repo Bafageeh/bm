@@ -642,7 +642,7 @@ function categoryNames(categories) {
   const names = (categories || []).map((item) => item?.name || item).filter(Boolean);
   return names.length ? names : DEFAULT_EXPENSE_CATEGORIES;
 }
-function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
+function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], reload }) {
   const options = categoryNames(categories);
   const [expenseFormVisible, setExpenseFormVisible] = useState(false);
   const [category, setCategory] = useState(options[0]);
@@ -650,6 +650,8 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
   const [expenseDate, setExpenseDate] = useState(todayDate());
   const [description, setDescription] = useState('');
   const [attachments, setAttachments] = useState([]);
+  const [scope, setScope] = useState('all');
+  const [selectedOwnerIds, setSelectedOwnerIds] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const [typeFormVisible, setTypeFormVisible] = useState(false);
@@ -666,11 +668,33 @@ function ExpensesScreen({ token, buildingId, expenses, categories, reload }) {
   const [editAmount, setEditAmount] = useState('');
   const [editDate, setEditDate] = useState(todayDate());
   const [editDescription, setEditDescription] = useState('');
+  const [editScope, setEditScope] = useState('all');
+  const [editSelectedOwnerIds, setEditSelectedOwnerIds] = useState([]);
   const [editNewAttachments, setEditNewAttachments] = useState([]);
   const [attachmentsVisible, setAttachmentsVisible] = useState(false);
   const [attachmentExpense, setAttachmentExpense] = useState(null);
   const [deletingAttachmentId, setDeletingAttachmentId] = useState(null);
   const [savingExpense, setSavingExpense] = useState(false);
+  const [managerDues, setManagerDues] = useState([]);
+  const [managerDueCounts, setManagerDueCounts] = useState({});
+  const [managerDuesVisible, setManagerDuesVisible] = useState(false);
+  const [reviewDue, setReviewDue] = useState(null);
+  const [managerReviewNotes, setManagerReviewNotes] = useState('');
+  const [verifyingDue, setVerifyingDue] = useState(false);
+
+  const loadManagerDues = async (silent = false) => {
+    try {
+      const data = await request(`/buildings/${buildingId}/expense-dues`, {}, token);
+      setManagerDues(data?.data || []);
+      setManagerDueCounts(data?.counts || {});
+    } catch (error) {
+      if (!silent) Alert.alert('تعذر تحميل حالات السداد', error.message);
+    }
+  };
+
+  useEffect(() => {
+    loadManagerDues(true);
+  }, [buildingId, token]);
 
   useEffect(() => {
     if (!options.includes(category)) setCategory(options[0]);
