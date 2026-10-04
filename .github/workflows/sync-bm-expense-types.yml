@@ -1,15 +1,8 @@
 name: Sync BM expense types
 
+# Legacy focused deployment kept for emergency/manual use only.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "bm-mobile/App.js"
-      - "bm-api/app/Http/Controllers/Api/ExpenseCategoryController.php"
-      - "bm-api/app/Models/ExpenseCategory.php"
-      - "bm-api/database/migrations/2026_09_23_170000_add_notes_and_active_to_expense_categories.php"
-      - ".github/workflows/sync-bm-expense-types.yml"
+  workflow_dispatch:
 
 jobs:
   sync:
