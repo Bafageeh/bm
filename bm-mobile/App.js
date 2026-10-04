@@ -642,8 +642,9 @@ function categoryNames(categories) {
   const names = (categories || []).map((item) => item?.name || item).filter(Boolean);
   return names.length ? names : DEFAULT_EXPENSE_CATEGORIES;
 }
-function expenseDueStatusLabel(status) {
+function expenseDueStatusLabel(status, due = null) {
   if (status === 'submitted') return 'بانتظار التحقق';
+  if (status === 'confirmed' && due?.auto_confirmed_from_balance) return 'مسدد من الرصيد';
   if (status === 'confirmed') return 'تم السداد';
   if (status === 'rejected') return 'لم يصل المبلغ';
   return 'غير مسدد';
@@ -1100,9 +1101,10 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
                   <Text style={styles.cardTitle}>{due?.owner?.name || 'مالك'}</Text>
                   <Text style={styles.cardSub}>{due?.expense?.category || 'مصروف'} • {displayDate(due?.expense?.expense_date)}</Text>
                 </View>
-                <View style={[styles.badge, expenseDueBadgeStyle(due.status)]}><Text style={styles.badgeText}>{expenseDueStatusLabel(due.status)}</Text></View>
+                <View style={[styles.badge, expenseDueBadgeStyle(due.status)]}><Text style={styles.badgeText}>{expenseDueStatusLabel(due.status, due)}</Text></View>
               </View>
               <Text style={styles.dueAmountText}>{money(due.amount)}</Text>
+              {Number(due.credit_applied || 0) > 0 ? <Text style={styles.dueBalanceUsedText}>استخدم من الرصيد: {money(due.credit_applied)}{Number(due.remaining_amount || 0) > 0 ? ` • المتبقي: ${money(due.remaining_amount)}` : ' • مؤكد تلقائيًا'}</Text> : null}
               {due.status === 'submitted' ? <Text style={styles.dueActionHint}>اضغط للتحقق من التحويل والإيصال</Text> : null}
               {due.status === 'rejected' && due.manager_notes ? <Text style={styles.dueManagerNote}>رد المدير: {due.manager_notes}</Text> : null}
             </Pressable>)}
@@ -1119,7 +1121,7 @@ function ExpensesScreen({ token, buildingId, expenses, categories, owners = [], 
             <Pressable onPress={() => setReviewDue(null)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
             <View style={styles.flex1}>
               <Text style={styles.floatingFormTitle}>التحقق من السداد</Text>
-              <Text style={styles.ownerMeta}>{reviewDue?.owner?.name || ''} • {money(reviewDue?.amount || 0)}</Text>
+              <Text style={styles.ownerMeta}>{reviewDue?.owner?.name || ''} • المطلوب التحقق منه {money(reviewDue?.remaining_amount ?? reviewDue?.amount ?? 0)}</Text>
             </View>
           </View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
@@ -2072,7 +2074,7 @@ function OwnerExpensesReadOnlyScreen({ token, buildingId, expenses, requestedDue
 
   const outstandingDues = dues.filter((due) => due.status === 'unpaid' || due.status === 'rejected');
   const submittedDues = dues.filter((due) => due.status === 'submitted');
-  const outstandingAmount = outstandingDues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
+  const outstandingAmount = outstandingDues.reduce((sum, due) => sum + Number(due.remaining_amount ?? due.amount ?? 0), 0);
 
   const openPaymentDue = (due) => {
     setPaymentDue(due);
@@ -2206,12 +2208,19 @@ function OwnerExpensesReadOnlyScreen({ token, buildingId, expenses, requestedDue
                   <Text style={styles.cardTitle}>{due?.expense?.category || 'فاتورة'}</Text>
                   <Text style={styles.cardSub}>{displayDate(due?.expense?.expense_date)}</Text>
                 </View>
-                <View style={[styles.badge, expenseDueBadgeStyle(due.status)]}><Text style={styles.badgeText}>{expenseDueStatusLabel(due.status)}</Text></View>
+                <View style={[styles.badge, expenseDueBadgeStyle(due.status)]}><Text style={styles.badgeText}>{expenseDueStatusLabel(due.status, due)}</Text></View>
               </View>
               <Text style={styles.dueAmountText}>{money(due.amount)}</Text>
+              {Number(due.credit_applied || 0) > 0 ? <View style={styles.balanceAppliedCard}>
+                <Ionicons name="wallet-outline" size={18} color="#047857" />
+                <View style={styles.flex1}>
+                  <Text style={styles.balanceAppliedTitle}>تم استخدام {money(due.credit_applied)} من رصيدك السابق</Text>
+                  <Text style={styles.balanceAppliedText}>{Number(due.remaining_amount || 0) > 0 ? `المتبقي عليك ${money(due.remaining_amount)}` : 'تم سداد نصيبك بالكامل وتأكيده تلقائيًا'}</Text>
+                </View>
+              </View> : null}
               {due.status === 'rejected' && due.manager_notes ? <Text style={styles.dueManagerNote}>رد المدير: {due.manager_notes}</Text> : null}
               {due.status === 'submitted' ? <Text style={styles.dueActionHint}>أرسلت بيانات الدفع وهي بانتظار تحقق المدير.</Text> : null}
-              {due.status === 'unpaid' || due.status === 'rejected' ? <Text style={styles.dueActionHint}>اضغط لتحديد حالة الدفع وإرسال الإثبات.</Text> : null}
+              {due.status === 'unpaid' || due.status === 'rejected' ? <Text style={styles.dueActionHint}>اضغط لسداد المبلغ المتبقي وإرسال الإثبات.</Text> : null}
             </Pressable>)}
           </ScrollView>
         </View>
@@ -2226,7 +2235,7 @@ function OwnerExpensesReadOnlyScreen({ token, buildingId, expenses, requestedDue
             <Pressable onPress={() => setPaymentDue(null)} style={styles.closeFloatingBtn}><Ionicons name="close" size={22} color="#0f172a" /></Pressable>
             <View style={styles.flex1}>
               <Text style={styles.floatingFormTitle}>سداد الفاتورة</Text>
-              <Text style={styles.ownerMeta}>{paymentDue?.expense?.category || ''} • {money(paymentDue?.amount || 0)}</Text>
+              <Text style={styles.ownerMeta}>{paymentDue?.expense?.category || ''} • المتبقي {money(paymentDue?.remaining_amount ?? paymentDue?.amount ?? 0)}</Text>
             </View>
           </View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingFormBody}>
@@ -2916,7 +2925,7 @@ const styles = StyleSheet.create({
   settingsHint: { color: '#64748b', textAlign: 'right', lineHeight: 21, marginBottom: 12 }, settingsLink: { backgroundColor: '#fff', borderRadius: 22, padding: 14, marginBottom: 10, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#e2e8f0' }, settingsIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center' }, settingsTitle: { color: '#0f172a', fontWeight: '900', fontSize: 15, textAlign: 'right' }, settingsText: { color: '#64748b', fontSize: 12, marginTop: 4, textAlign: 'right' }, settingsLogoutLink: { backgroundColor: '#fff7f7', borderRadius: 22, padding: 14, marginTop: 4, marginBottom: 10, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#fecaca' }, settingsLogoutIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center' }, settingsLogoutTitle: { color: '#dc2626', fontWeight: '900', fontSize: 15, textAlign: 'right' }, settingsLogoutText: { color: '#b91c1c', fontSize: 12, marginTop: 4, textAlign: 'right' },
   notificationLinkText: { color: '#0f766e', fontSize: 11, fontWeight: '900', textAlign: 'right', marginTop: 5 },
   paymentReviewCard: { backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#dbe5ea', padding: 13, marginBottom: 14, flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
-  dueCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 17, padding: 12, marginBottom: 9 }, dueCardConfirmed: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }, dueCardTop: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }, dueAmountText: { color: '#0f172a', fontSize: 18, fontWeight: '900', textAlign: 'right', marginTop: 8 }, dueActionHint: { color: '#0f766e', fontSize: 11, fontWeight: '800', textAlign: 'right', marginTop: 6 }, dueManagerNote: { color: '#b91c1c', fontSize: 11, lineHeight: 18, textAlign: 'right', marginTop: 6 },
+  dueCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 17, padding: 12, marginBottom: 9 }, dueCardConfirmed: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }, dueCardTop: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }, dueAmountText: { color: '#0f172a', fontSize: 18, fontWeight: '900', textAlign: 'right', marginTop: 8 }, dueActionHint: { color: '#0f766e', fontSize: 11, fontWeight: '800', textAlign: 'right', marginTop: 6 }, dueManagerNote: { color: '#b91c1c', fontSize: 11, lineHeight: 18, textAlign: 'right', marginTop: 6 }, dueBalanceUsedText: { color: '#047857', fontSize: 11, fontWeight: '900', textAlign: 'right', marginTop: 6 }, balanceAppliedCard: { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 14, padding: 10, marginTop: 8, flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }, balanceAppliedTitle: { color: '#047857', fontSize: 12, fontWeight: '900', textAlign: 'right' }, balanceAppliedText: { color: '#475569', fontSize: 11, fontWeight: '700', textAlign: 'right', marginTop: 3 },
   paymentDetailsCard: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, padding: 12, marginBottom: 10 }, paymentDetailsLine: { color: '#334155', fontSize: 13, textAlign: 'right', lineHeight: 22, fontWeight: '700' },
   receiptOpenButton: { minHeight: 48, borderRadius: 14, backgroundColor: '#faf5ff', borderWidth: 1, borderColor: '#ddd6fe', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 }, receiptOpenButtonText: { color: '#6d28d9', fontWeight: '900', fontSize: 13 },
   rejectPaymentButton: { minHeight: 50, borderRadius: 15, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }, rejectPaymentButtonText: { color: '#dc2626', fontWeight: '900', fontSize: 14 },
