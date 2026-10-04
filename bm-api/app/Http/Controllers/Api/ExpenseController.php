@@ -211,19 +211,76 @@ class ExpenseController extends BaseApiController
                 'owner_id' => (int) $ownerId,
             ]);
 
+            $due->loadMissing('payment');
+
+            $previousBalance = $this->availablePriorBalance(
+                $building,
+                (int) $ownerId,
+                $expense->id,
+                $due->owner_payment_id
+            );
+            $creditApplied = round(min((float) $share, max(0, $previousBalance)), 2);
+            $remainingAmount = round(max(0, (float) $share - $creditApplied), 2);
+
+            $wasAutoConfirmed = (bool) ($due->auto_confirmed_from_balance ?? false);
             $due->building_id = $building->id;
             $due->amount = $share;
-            if (! $due->exists) {
+            $due->credit_applied = $creditApplied;
+
+            if ($remainingAmount <= 0.009) {
+                if (! $due->payment) {
+                    $due->status = 'confirmed';
+                    $due->auto_confirmed_from_balance = true;
+                    $due->payment_method = 'رصيد سابق';
+                    $due->payment_date = optional($expense->expense_date)->format('Y-m-d') ?: now()->format('Y-m-d');
+                    $due->submitted_at = null;
+                    $due->verified_at = now();
+                    $due->verified_by_user_id = null;
+                    $due->manager_notes = 'تم تأكيد السداد تلقائيًا باستخدام الرصيد السابق.';
+                }
+            } else {
+                $due->auto_confirmed_from_balance = false;
+
+                if (! $due->exists || $wasAutoConfirmed) {
+                    $due->status = 'unpaid';
+                    $due->payment_method = null;
+                    $due->payment_date = null;
+                    $due->submitted_at = null;
+                    $due->verified_at = null;
+                    $due->verified_by_user_id = null;
+                    $due->manager_notes = null;
+                }
+
+                if ($due->status === 'confirmed' && $due->payment) {
+                    $due->payment->update(['amount' => $remainingAmount]);
+                }
+            }
+
+            if (! $due->exists && $remainingAmount > 0.009) {
                 $due->status = 'unpaid';
             }
-            $due->save();
 
-            if ($due->status === 'confirmed' && $due->payment) {
-                $due->payment->update(['amount' => $share]);
-            }
+            $due->save();
         }
 
         return $expense->dues()->with(['owner:id,name,user_id', 'expense'])->get();
+    }
+
+    private function availablePriorBalance(Building $building, int $ownerId, int $currentExpenseId, ?int $currentPaymentId = null): float
+    {
+        $payments = DB::table('owner_payments')
+            ->where('building_id', $building->id)
+            ->where('owner_id', $ownerId)
+            ->when($currentPaymentId, fn ($query) => $query->where('id', '!=', $currentPaymentId))
+            ->sum('amount');
+
+        $otherDues = ExpenseOwnerDue::query()
+            ->where('building_id', $building->id)
+            ->where('owner_id', $ownerId)
+            ->where('expense_id', '!=', $currentExpenseId)
+            ->sum('amount');
+
+        return round(max(0, (float) $payments - (float) $otherDues), 2);
     }
 
     private function dueAllocations(Building $building, Expense $expense, array $ownerIds): array
@@ -281,15 +338,32 @@ class ExpenseController extends BaseApiController
 
     private function notifyDueOwners(Building $building, Expense $expense, Collection $dues, string $event): void
     {
-        $userIds = collect();
-
         foreach ($dues as $due) {
             $userId = $due->owner?->user_id;
             if (! $userId) {
                 continue;
             }
 
-            $userIds->push($userId);
+            $share = (float) $due->amount;
+            $credit = (float) ($due->credit_applied ?? 0);
+            $remaining = (float) $due->remaining_amount;
+
+            if ($due->auto_confirmed_from_balance && $remaining <= 0.009) {
+                $title = 'تم السداد من رصيدك السابق';
+                $body = 'تم استخدام '.number_format($credit, 2).' ريال من رصيدك السابق لتغطية نصيبك من '.$expense->category.'، وتم تأكيد السداد تلقائيًا.';
+                $type = 'expense_paid_from_balance';
+                $action = 'expense_due';
+            } elseif ($credit > 0.009) {
+                $title = 'تم استخدام جزء من رصيدك';
+                $body = 'نصيبك من '.$expense->category.' هو '.number_format($share, 2).' ريال. تم استخدام '.number_format($credit, 2).' ريال من رصيدك السابق، والمتبقي عليك '.number_format($remaining, 2).' ريال.';
+                $type = 'expense_due';
+                $action = 'expense_due';
+            } else {
+                $title = $event === 'updated' ? 'تم تحديث فاتورة مستحقة عليك' : 'فاتورة جديدة مستحقة عليك';
+                $body = 'نصيبك من '.$expense->category.' هو '.number_format($share, 2).' ريال. اضغط لفتح شاشة السداد.';
+                $type = 'expense_due';
+                $action = 'expense_due';
+            }
 
             UserNotification::updateOrCreate(
                 [
@@ -299,31 +373,32 @@ class ExpenseController extends BaseApiController
                 ],
                 [
                     'building_id' => $building->id,
-                    'type' => 'expense_due',
-                    'title' => $event === 'updated' ? 'تم تحديث فاتورة مستحقة عليك' : 'فاتورة جديدة مستحقة عليك',
-                    'body' => 'نصيبك من '.$expense->category.' هو '.number_format((float) $due->amount, 2).' ريال. اضغط لفتح شاشة السداد.',
+                    'type' => $type,
+                    'title' => $title,
+                    'body' => $body,
                     'data' => [
                         'building_id' => $building->id,
                         'expense_id' => $expense->id,
                         'due_id' => $due->id,
                         'tab' => 'expenses',
-                        'action' => 'expense_due',
+                        'action' => $action,
                     ],
                     'read_at' => null,
                 ]
             );
-        }
 
-        app(ExpenseNotificationService::class)->pushToUsers(
-            $userIds,
-            $event === 'updated' ? 'تم تحديث فاتورة مستحقة' : 'فاتورة جديدة مستحقة',
-            'لديك مبلغ مستحق في مصروفات المبنى. افتح التنبيه للاطلاع على الفاتورة وتسجيل السداد.',
-            [
-                'type' => 'expense_due',
-                'building_id' => $building->id,
-                'tab' => 'expenses',
-            ]
-        );
+            app(ExpenseNotificationService::class)->pushToUsers(
+                [$userId],
+                $title,
+                $body,
+                [
+                    'type' => $type,
+                    'building_id' => $building->id,
+                    'due_id' => $due->id,
+                    'tab' => 'expenses',
+                ]
+            );
+        }
     }
 
     private function freshExpense(Expense $expense): Expense
