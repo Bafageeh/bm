@@ -2300,7 +2300,7 @@ function OwnerExpensesReadOnlyScreen({ token, buildingId, expenses, requestedDue
               <View style={styles.flex1}>
                 <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Text style={styles.cardTitle}>{displayDate(item.expense_date)}</Text>
-                  {item.due_status ? <View style={[styles.badge, expenseDueBadgeStyle(item.due_status)]}><Text style={styles.badgeText}>{expenseDueStatusLabel(item.due_status)}</Text></View> : null}
+                  {item.due_status ? <View style={[styles.badge, expenseDueBadgeStyle(item.due_status)]}><Text style={styles.badgeText}>{expenseDueStatusLabel(item.due_status, { auto_confirmed_from_balance: item.auto_confirmed_from_balance })}</Text></View> : null}
                 </View>
                 {item.description ? <Text style={[styles.cardSub, { marginTop: 5 }]}>{displayTextDates(item.description)}</Text> : null}
                 <Text style={[styles.cardSub, { marginTop: 7 }]}>إجمالي المصروف: {money(item.amount)}</Text>
