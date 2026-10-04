@@ -1,5 +1,5 @@
 name: Build BM APK
-# trigger: chat keyboard fix 2026-10-03
+# trigger: owner-balance-apk 2026-10-04
 
 on:
   workflow_dispatch:
