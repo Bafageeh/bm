@@ -201,7 +201,7 @@ class ExpenseDueController extends BaseApiController
         $payload = [
             'building_id' => $due->building_id,
             'apartment_id' => null,
-            'amount' => $due->amount,
+            'amount' => $due->remaining_amount,
             'payment_date' => optional($due->payment_date)->format('Y-m-d') ?: now()->format('Y-m-d'),
             'method' => $due->payment_method,
             'notes' => trim(
@@ -245,7 +245,7 @@ class ExpenseDueController extends BaseApiController
                     'building_id' => $due->building_id,
                     'type' => 'expense_payment_submitted',
                     'title' => 'إثبات سداد بانتظار التحقق',
-                    'body' => ($due->owner?->name ?: 'مالك').' أرسل إثبات سداد بقيمة '.number_format((float) $due->amount, 2).' ريال.',
+                    'body' => ($due->owner?->name ?: 'مالك').' أرسل إثبات سداد بقيمة '.number_format((float) $due->remaining_amount, 2).' ريال.',
                     'data' => [
                         'building_id' => $due->building_id,
                         'due_id' => $due->id,
@@ -260,7 +260,7 @@ class ExpenseDueController extends BaseApiController
         app(ExpenseNotificationService::class)->pushToUsers(
             $managerIds,
             'إثبات سداد بانتظار التحقق',
-            ($due->owner?->name ?: 'مالك').' أرسل إثبات سداد بقيمة '.number_format((float) $due->amount, 2).' ريال.',
+            ($due->owner?->name ?: 'مالك').' أرسل إثبات سداد بقيمة '.number_format((float) $due->remaining_amount, 2).' ريال.',
             [
                 'type' => 'expense_payment_submitted',
                 'building_id' => $due->building_id,
@@ -278,6 +278,12 @@ class ExpenseDueController extends BaseApiController
         }
 
         $confirmed = $due->status === 'confirmed';
+        $cashAmount = (float) $due->remaining_amount;
+        $creditAmount = (float) ($due->credit_applied ?? 0);
+        $confirmedBody = $creditAmount > 0.009
+            ? 'تم تأكيد وصول المبلغ المتبقي '.number_format($cashAmount, 2).' ريال، بعد استخدام '.number_format($creditAmount, 2).' ريال من رصيدك السابق. أصبح المصروف مسددًا بالكامل.'
+            : 'تم تأكيد استلام مبلغ '.number_format($cashAmount, 2).' ريال.';
+
         UserNotification::create([
             'user_id' => $userId,
             'building_id' => $due->building_id,
@@ -286,8 +292,8 @@ class ExpenseDueController extends BaseApiController
             'type' => $confirmed ? 'expense_payment_confirmed' : 'expense_payment_rejected',
             'title' => $confirmed ? 'تم توثيق السداد' : 'لم يتم تأكيد وصول المبلغ',
             'body' => $confirmed
-                ? 'تم تأكيد استلام مبلغ '.number_format((float) $due->amount, 2).' ريال.'
-                : 'لم يتم تأكيد وصول مبلغ '.number_format((float) $due->amount, 2).' ريال. '.trim((string) $due->manager_notes),
+                ? $confirmedBody
+                : 'لم يتم تأكيد وصول مبلغ '.number_format($cashAmount, 2).' ريال. '.trim((string) $due->manager_notes),
             'data' => [
                 'building_id' => $due->building_id,
                 'due_id' => $due->id,
@@ -300,7 +306,7 @@ class ExpenseDueController extends BaseApiController
             [$userId],
             $confirmed ? 'تم توثيق السداد' : 'لم يتم تأكيد وصول المبلغ',
             $confirmed
-                ? 'تم تأكيد استلام مبلغ '.number_format((float) $due->amount, 2).' ريال.'
+                ? $confirmedBody
                 : 'راجع فاتورتك وأعد إرسال بيانات السداد بعد التحقق من التحويل.',
             [
                 'type' => $confirmed ? 'expense_payment_confirmed' : 'expense_payment_rejected',
