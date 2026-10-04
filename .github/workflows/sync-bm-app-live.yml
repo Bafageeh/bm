@@ -1,12 +1,8 @@
 name: Sync BM App live
 
+# Legacy focused deployment kept for emergency/manual use only.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "bm-mobile/App.js"
-      - ".github/workflows/sync-bm-app-live.yml"
+  workflow_dispatch:
 
 jobs:
   sync:
