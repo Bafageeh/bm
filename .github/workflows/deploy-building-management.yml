@@ -1,15 +1,7 @@
 name: Deploy Building Management
 
+# Legacy focused deployment kept for emergency/manual use only.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "bm-api/app/Http/Controllers/Api/BuildingController.php"
-      - "bm-api/app/Http/Controllers/Api/AuthController.php"
-      - "bm-api/app/Http/Controllers/Api/BaseApiController.php"
-      - "bm-api/routes/api.php"
-      - ".github/workflows/deploy-building-management.yml"
   workflow_dispatch:
 
 jobs:
