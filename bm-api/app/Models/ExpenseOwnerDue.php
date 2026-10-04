@@ -13,6 +13,8 @@ class ExpenseOwnerDue extends Model
         'building_id',
         'owner_id',
         'amount',
+        'credit_applied',
+        'auto_confirmed_from_balance',
         'status',
         'payment_method',
         'payment_date',
@@ -35,12 +37,15 @@ class ExpenseOwnerDue extends Model
 
     protected $appends = [
         'receipt_url',
+        'remaining_amount',
     ];
 
     protected function casts(): array
     {
         return [
             'amount' => 'decimal:2',
+            'credit_applied' => 'decimal:2',
+            'auto_confirmed_from_balance' => 'boolean',
             'payment_date' => 'date:Y-m-d',
             'submitted_at' => 'datetime',
             'verified_at' => 'datetime',
@@ -79,6 +84,11 @@ class ExpenseOwnerDue extends Model
     public function payment(): BelongsTo
     {
         return $this->belongsTo(OwnerPayment::class, 'owner_payment_id');
+    }
+
+    public function getRemainingAmountAttribute(): float
+    {
+        return round(max(0, (float) $this->amount - (float) $this->credit_applied), 2);
     }
 
     public function getReceiptUrlAttribute(): ?string
