@@ -1,12 +1,8 @@
 name: Deploy BM apartment ledger UI
 
+# Legacy focused deployment kept for emergency/manual use only.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "bm-mobile/App.js"
-      - ".github/workflows/deploy-apartment-ledger-ui.yml"
+  workflow_dispatch:
 
 jobs:
   deploy:
