@@ -1,17 +1,7 @@
 name: Deploy BM Chat
 
+# Legacy focused deployment kept for emergency/manual use only.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "bm-api/app/Http/Controllers/Api/ChatController.php"
-      - "bm-api/app/Models/ChatConversation.php"
-      - "bm-api/app/Models/ChatMessage.php"
-      - "bm-api/app/Services/ChatNotificationService.php"
-      - "bm-api/database/migrations/2026_10_03_181500_create_chat_tables.php"
-      - "bm-api/routes/api.php"
-      - ".github/workflows/deploy-chat.yml"
   workflow_dispatch:
 
 jobs:
