@@ -1,11 +1,7 @@
 name: Deploy BM apartment-managed owners
 
+# Legacy focused deployment kept for emergency/manual use only.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "bm-mobile/App.js"
   workflow_dispatch:
 
 jobs:
